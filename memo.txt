@@ -1,0 +1,5 @@
+bunx drizzle-kit push
+
+bunx drizzle-kit studio
+
+bun src/scripts/seed-categories.ts
