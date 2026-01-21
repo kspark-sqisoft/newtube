@@ -5,7 +5,10 @@ import {
   uuid,
   timestamp,
   uniqueIndex,
+  integer,
+  pgEnum,
 } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
 
 export const users = pgTable(
   "users",
@@ -41,6 +44,8 @@ export const categoryRelations = relations(categories, ({ many }) => ({
   videos: many(videos),
 }));
 
+export const videoVisibility = pgEnum("video_visibility", ["public", "private"]);
+
 export const videos = pgTable("videos", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
@@ -52,7 +57,10 @@ export const videos = pgTable("videos", {
   muxPlaybackId: text("mux_playback_id").unique(),
   muxTrackId: text("mux_track_id").unique(),
   muxTrackStatus: text("mux_track_status"),
-
+  thumbnailUrl: text("thumbnail_url"),
+  previewUrl: text("preview_url"),
+  duration: integer("duration").default(0).notNull(),
+  visibility: videoVisibility("visibility").default("private").notNull(),
   userId: uuid("user_id")
     .references(() => users.id, {
       onDelete: "cascade",
@@ -66,6 +74,10 @@ export const videos = pgTable("videos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const videoInsertSchema = createInsertSchema(videos);
+export const videoUpdateSchema = createUpdateSchema(videos);
+export const videoSelectSchema = createSelectSchema(videos);
 
 //어플리케이션 레벨에서만 사용되는 관계(마이그레이션 에 영향 끼치지 않음)bunx drizzle-kit push
 export const videoRelations = relations(videos, ({ one }) => ({
