@@ -25,6 +25,7 @@ const VideoPlayer = ({
       className="w-full h-full object-contain"
       accentColor="#FF2056"
       onPlay={onPlay}
+      
     />
   );
 };
