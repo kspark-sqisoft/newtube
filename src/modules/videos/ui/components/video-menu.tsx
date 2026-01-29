@@ -9,9 +9,9 @@ interface VideoMenuProps {
     onRemove?: () => void;
 }
 
-export const VideoMenu = ({ videoId, variant , onRemove }: VideoMenuProps) => {
+export const VideoMenu = ({ videoId, variant = "ghost", onRemove }: VideoMenuProps) => {
 
-    const onShare = () =>{
+    const onShare = () => {
         const fullUrl = `${process.env.VERCEL_URL || "http://localhost:3000"}/videos/${videoId}`;
         navigator.clipboard.writeText(fullUrl);
         toast.success("Link copied to clipboard");
@@ -28,15 +28,15 @@ export const VideoMenu = ({ videoId, variant , onRemove }: VideoMenuProps) => {
                     <ShareIcon className="mr-2 size-4" />
                     Share
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={()=>{}}>
+                <DropdownMenuItem onClick={() => { }}>
                     <ListPlusIcon className="mr-2 size-4" />
                     Add to playlist
                 </DropdownMenuItem>
-                {onRemove &&(
-                <DropdownMenuItem onClick={()=>{}}>
-                    <Trash2Icon className="mr-2 size-4" />
-                    Remove
-                </DropdownMenuItem>
+                {onRemove && (
+                    <DropdownMenuItem onClick={() => { }}>
+                        <Trash2Icon className="mr-2 size-4" />
+                        Remove
+                    </DropdownMenuItem>
                 )}
             </DropdownMenuContent>
         </DropdownMenu>

@@ -1,7 +1,25 @@
-const SuggestionsSection = () => {
+"use client";
+
+import { DEFAULT_LIMIT } from "@/constants";
+import { trpc } from "@/trpc/client";
+import { VideoRowCard } from "../components/video-row-card";
+
+interface SuggestionsSectionProps {
+    videoId: string;
+}
+
+const SuggestionsSection = ({ videoId }: SuggestionsSectionProps) => {
+    const [suggestions] = trpc.suggestions.getMany.useSuspenseInfiniteQuery({
+        videoId,
+        limit: DEFAULT_LIMIT,
+    }, {
+        getNextPageParam: (lastPage) => lastPage.nextCursor,
+    });
     return (
         <div>
-            <h2>Suggestions</h2>
+            {suggestions.pages.flatMap((page) => page.items.map((video) => (
+                <VideoRowCard key={video.id} data={video} onRemove={() => { }} size="compact" />
+            )))}
         </div>
     );
 };
