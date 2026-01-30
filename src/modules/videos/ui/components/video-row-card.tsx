@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserInfo } from "@/modules/users/ui/components/user-info";
 import { UserAvatar } from "@/components/user-avatar";
 import { VideoMenu } from "./video-menu";
@@ -42,12 +42,20 @@ interface VideoRowCardProps extends VariantProps<typeof videoRowCardVariants> {
 export const VideoRowCardSkeleton = () => {
     return (
         <div className={cn(videoRowCardVariants({ size: "default" }))}>
-            Skeleton
+            <Skeleton></Skeleton>
         </div>
     );
 };
 
 export const VideoRowCard = ({ data, onRemove, size }: VideoRowCardProps) => {
+    const compactViews = useMemo(() => {
+        return Intl.NumberFormat("en", { notation: "compact" }).format(data.viewCount);
+    }, [data.viewCount]);
+
+    const compactLikes = useMemo(() => {
+        return Intl.NumberFormat("en", { notation: "compact" }).format(data.likeCount);
+    }, [data.likeCount]);
+
     return (
         <div className={videoRowCardVariants({ size })}>
             <Link href={`/videos/${data.id}`} className={thumbnailVariants({ size })}>
@@ -66,7 +74,7 @@ export const VideoRowCard = ({ data, onRemove, size }: VideoRowCardProps) => {
                         </h3>
                         {size === "default" && (
                             <p>
-                                {data.viewCount} views • {data.likeCount} likes
+                                {compactViews} views • {compactLikes} likes
                             </p>
                         )}
                         {size === "default" && (
@@ -92,7 +100,7 @@ export const VideoRowCard = ({ data, onRemove, size }: VideoRowCardProps) => {
                         )}
                         {size == "compact" && (
                             <p className="text-xs text-muted-foreground mt-1">
-                                {data.viewCount} views • {data.likeCount} likes
+                                {compactViews} views • {compactLikes} likes
                             </p>
                         )}
                     </Link>

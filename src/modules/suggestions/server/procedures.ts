@@ -31,7 +31,6 @@ export const suggestionsRouter = createTRPCRouter({
 
       if(!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
       
-
       const data = await db
         .select({
             ...getTableColumns(videos),
