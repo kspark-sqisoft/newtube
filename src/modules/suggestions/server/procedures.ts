@@ -50,6 +50,7 @@ export const suggestionsRouter = createTRPCRouter({
         .where(
           and(
             ne(videos.id, videoId), // 자기 자신 영상 제외
+            eq(videos.visibility, "public"), // 공개된 영상만
             existingVideo.categoryId 
             ? eq(videos.categoryId, existingVideo.categoryId):undefined,
             cursor
