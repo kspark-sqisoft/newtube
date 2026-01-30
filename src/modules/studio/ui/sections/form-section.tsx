@@ -1,6 +1,6 @@
 "use client";
 
-import {z} from "zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,10 +9,10 @@ import { trpc } from "@/trpc/client";
 import { CopyCheckIcon, CopyIcon, Globe2Icon, ImagePlusIcon, Loader2Icon, LockIcon, MoreVerticalIcon, RotateCcwIcon, SparklesIcon, TrashIcon } from "lucide-react";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import {useForm} from "react-hook-form";
-import {zodResolver} from "@hookform/resolvers/zod";
-import {Form, FormControl, FormField, FormLabel, FormMessage, FormItem} from "@/components/ui/form";
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormLabel, FormMessage, FormItem } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { videoUpdateSchema } from "@/db/schema";
 import { toast } from "sonner";
 import VideoPlayer from "@/modules/videos/ui/components/video-player";
@@ -44,49 +44,49 @@ const FormSectionSkeleton = () => {
         <div>
             <div className="flex items-center justify-between mb-6">
                 <div className="space-y-2">
-                    <Skeleton className="h-7 w-32"/>
-                    <Skeleton className="h-4 w-40"/>
+                    <Skeleton className="h-7 w-32" />
+                    <Skeleton className="h-4 w-40" />
                 </div>
                 <Skeleton className="h-9 w-24" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="space-y-8 lg:col-span-3">
                     <div className="space-y-2">
-                        <Skeleton className="h-5 w-16"/>
-                        <Skeleton className="h-10 w-full"/>
+                        <Skeleton className="h-5 w-16" />
+                        <Skeleton className="h-10 w-full" />
                     </div>
                     <div className="space-y-2">
-                        <Skeleton className="h-5 w-24"/>
-                        <Skeleton className="h-[220px] w-full"/>
+                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="h-[220px] w-full" />
                     </div>
                     <div className="space-y-2">
-                        <Skeleton className="h-5 w-20"/>
-                        <Skeleton className="h-[84px] w-[153px]"/>
+                        <Skeleton className="h-5 w-20" />
+                        <Skeleton className="h-[84px] w-[153px]" />
                     </div>
                     <div className="space-y-2">
-                        <Skeleton className="h-5 w-20"/>
-                        <Skeleton className="h-10 w-full"/>
+                        <Skeleton className="h-5 w-20" />
+                        <Skeleton className="h-10 w-full" />
                     </div>
                 </div>
                 <div className="flex flex-col gap-y-8 lg:col-span-2">
                     <div className="flex flex-col gap-y-4 bg-[#F9F9F9] rounded-xl overflow-hidden">
-                        <Skeleton className="aspect-video"/>
+                        <Skeleton className="aspect-video" />
                         <div className="px-4 py-4 space-y-6">
                             <div className="space-y-2">
-                                <Skeleton className="h-4 w-20"/>
-                                <Skeleton className="h-5 w-full"/>
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-5 w-full" />
                             </div>
                             <div className="space-y-2">
-                                <Skeleton className="h-4 w-24"/>
-                                <Skeleton className="h-5 w-32"/>
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-5 w-32" />
                             </div>
                             <div className="space-y-2">
-                                <Skeleton className="h-4 w-24"/>
-                                <Skeleton className="h-5 w-32"/>
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-5 w-32" />
                             </div>
                             <div className="space-y-2">
-                                <Skeleton className="h-4 w-20"/>
-                                <Skeleton className="h-10 w-full"/>
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-10 w-full" />
                             </div>
 
                         </div>
@@ -101,43 +101,54 @@ const FormSectionSkeleton = () => {
 const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     const router = useRouter();
     const utils = trpc.useUtils();
-    const [video] = trpc.studio.getOne.useSuspenseQuery({id:videoId});
+    const [video] = trpc.studio.getOne.useSuspenseQuery({ id: videoId });
     const [categories] = trpc.categories.getMany.useSuspenseQuery();
 
     const update = trpc.videos.update.useMutation({
-        onSuccess:() => {
+        onSuccess: () => {
             utils.studio.getMany.invalidate();
-            utils.studio.getOne.invalidate({id:videoId});
-            toast.success("Video updated successfully");
+            utils.studio.getOne.invalidate({ id: videoId });
+            toast.success("Video updated");
         },
-        onError:() => {
+        onError: () => {
             toast.error("Something went wrong");
         }
     });
 
     const remove = trpc.videos.remove.useMutation({
-        onSuccess:() => {
+        onSuccess: () => {
             utils.studio.getMany.invalidate();
-            toast.success("Video removed successfully");
+            toast.success("Video removed");
             router.push("/studio");
         },
-        onError:() => {
+        onError: () => {
             toast.error("Something went wrong");
         }
     });
 
-    const form = useForm<z.infer<typeof videoUpdateSchema>>({defaultValues:video, resolver:zodResolver(videoUpdateSchema)});
+    const revalidate = trpc.videos.revalidate.useMutation({
+        onSuccess: () => {
+            utils.studio.getMany.invalidate();
+            utils.studio.getOne.invalidate({ id: videoId });
+            toast.success("Video revalidated");
+        },
+        onError: () => {
+            toast.error("Something went wrong");
+        }
+    });
 
-    const onSubmit =  (data: z.infer<typeof videoUpdateSchema>) => {
-         update.mutate(data);
+    const form = useForm<z.infer<typeof videoUpdateSchema>>({ defaultValues: video, resolver: zodResolver(videoUpdateSchema) });
+
+    const onSubmit = (data: z.infer<typeof videoUpdateSchema>) => {
+        update.mutate(data);
     };
     //TODO: Change if deploying outside of VERCEL
     const fullUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/videos/${video.id}`;
     const [isCopied, setIsCopied] = useState(false);
-    const onCopy = async() => {
+    const onCopy = async () => {
         await navigator.clipboard.writeText(fullUrl);
         setIsCopied(true);
-        setTimeout(()=>{
+        setTimeout(() => {
             setIsCopied(false);
         }, 2000);
     }
@@ -146,35 +157,35 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     const [thumbnailGenerateModalOpen, setThumbnailGenerateModalOpen] = useState(false);
 
     const restoreThumbnail = trpc.videos.restoreThumbnail.useMutation({
-        onSuccess:() => {
+        onSuccess: () => {
             utils.studio.getMany.invalidate();
-            utils.studio.getOne.invalidate({id:videoId});
+            utils.studio.getOne.invalidate({ id: videoId });
             toast.success("Thumbnail restored successfully");
-            
+
         },
-        onError:() => {
+        onError: () => {
             toast.error("Something went wrong");
         }
     });
 
     const generateTitle = trpc.videos.generateTitle.useMutation({
-        onSuccess:() => {
-            
-            toast.success("Background job started", {description:"This may take some time"});
-            
+        onSuccess: () => {
+
+            toast.success("Background job started", { description: "This may take some time" });
+
         },
-        onError:() => {
+        onError: () => {
             toast.error("Something went wrong");
         }
     });
 
     const generateDescription = trpc.videos.generateDescription.useMutation({
-        onSuccess:() => {
-            
-            toast.success("Background job started", {description:"This may take some time"});
-            
+        onSuccess: () => {
+
+            toast.success("Background job started", { description: "This may take some time" });
+
         },
-        onError:() => {
+        onError: () => {
             toast.error("Something went wrong");
         }
     });
@@ -203,7 +214,11 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={()=>remove.mutate({id:videoId})}>
+                                    <DropdownMenuItem onClick={() => revalidate.mutate({ id: videoId })}>
+                                        <RotateCcwIcon className="size-4 mr-2" />
+                                        Revalidate
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => remove.mutate({ id: videoId })}>
                                         <TrashIcon className="size-4 mr-2" />
                                         Delete
                                     </DropdownMenuItem>
@@ -215,14 +230,14 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                         <div className="space-y-8 lg:col-span-3">
                             {/* Title */}
                             <FormField control={form.control} name="title" render={
-                                ({field}) => (
+                                ({ field }) => (
                                     <FormItem>
                                         <FormLabel>
                                             <div className="flex items-center gap-x-2">
-                                            Title
-                                            <Button size="icon" variant="outline" type="button" className="rounded-full size-6 [&_svg]:size-3" onClick={()=>generateTitle.mutate({id:videoId})} disabled={generateTitle.isPending || !video.muxTrackId}>
-                                                {generateTitle.isPending ? <Loader2Icon className="animate-spin" /> : <SparklesIcon/>}
-                                            </Button>
+                                                Title
+                                                <Button size="icon" variant="outline" type="button" className="rounded-full size-6 [&_svg]:size-3" onClick={() => generateTitle.mutate({ id: videoId })} disabled={generateTitle.isPending || !video.muxTrackId}>
+                                                    {generateTitle.isPending ? <Loader2Icon className="animate-spin" /> : <SparklesIcon />}
+                                                </Button>
                                             </div>
                                         </FormLabel>
                                         <FormControl>
@@ -234,14 +249,14 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                             } />
                             {/* Description */}
                             <FormField control={form.control} name="description" render={
-                                ({field}) => (
+                                ({ field }) => (
                                     <FormItem>
                                         <FormLabel>
-                                        <div className="flex items-center gap-x-2">
-                                            Description
-                                            <Button size="icon" variant="outline" type="button" className="rounded-full size-6 [&_svg]:size-3" onClick={()=>generateDescription.mutate({id:videoId})} disabled={generateDescription.isPending || !video.muxTrackId}>
-                                                {generateDescription.isPending ? <Loader2Icon className="animate-spin" /> : <SparklesIcon/>}
-                                            </Button>
+                                            <div className="flex items-center gap-x-2">
+                                                Description
+                                                <Button size="icon" variant="outline" type="button" className="rounded-full size-6 [&_svg]:size-3" onClick={() => generateDescription.mutate({ id: videoId })} disabled={generateDescription.isPending || !video.muxTrackId}>
+                                                    {generateDescription.isPending ? <Loader2Icon className="animate-spin" /> : <SparklesIcon />}
+                                                </Button>
                                             </div>
                                         </FormLabel>
                                         <FormControl>
@@ -253,15 +268,15 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                             } />
 
                             {/* TODO: Add thumbnail field here */}
-                            <FormField 
+                            <FormField
                                 name="thumbnailUrl"
                                 control={form.control}
-                                render={()=>(
+                                render={() => (
                                     <FormItem>
                                         <FormLabel>Thumbnail</FormLabel>
                                         <FormControl>
                                             <div className="p-0.5 border border-dashed border-nautral-400 relative h-[84px] w-[153px] group">
-                                                <Image 
+                                                <Image
                                                     src={video.thumbnailUrl || THUMBNAIL_FALLBACK}
                                                     className="object-cover"
                                                     fill
@@ -274,15 +289,15 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="start" side="right">
-                                                        <DropdownMenuItem onClick={()=>setThumbnailModalOpen(true)}>
+                                                        <DropdownMenuItem onClick={() => setThumbnailModalOpen(true)}>
                                                             <ImagePlusIcon className="size-4 mr-1" />
                                                             Change
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={()=>setThumbnailGenerateModalOpen(true)}>
+                                                        <DropdownMenuItem onClick={() => setThumbnailGenerateModalOpen(true)}>
                                                             <SparklesIcon className="size-4 mr-1" />
                                                             AI-generated
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={()=>restoreThumbnail.mutate({id:videoId})}>
+                                                        <DropdownMenuItem onClick={() => restoreThumbnail.mutate({ id: videoId })}>
                                                             <RotateCcwIcon className="size-4 mr-1" />
                                                             Restore
                                                         </DropdownMenuItem>
@@ -294,7 +309,7 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                 )}
                             />
                             <FormField control={form.control} name="categoryId" render={
-                                ({field}) => (
+                                ({ field }) => (
                                     <FormItem>
                                         <FormLabel>
                                             Category
@@ -306,10 +321,10 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {categories.map((category)=>(
+                                                {categories.map((category) => (
                                                     <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
                                                 ))}
-                                                
+
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -317,7 +332,7 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                 )
                             } />
 
-                            
+
                         </div>
                         {/*두번째 컬럼 */}
                         <div className="flex flex-col gap-y-8 lg:col-span-2">
@@ -367,7 +382,7 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                 </div>
                             </div>
                             <FormField control={form.control} name="visibility" render={
-                                ({field}) => (
+                                ({ field }) => (
                                     <FormItem>
                                         <FormLabel>
                                             Visibility
@@ -379,19 +394,19 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                            <SelectItem value="public">
-                                                <div className="flex items-center">
-                                                    <Globe2Icon className="size-4 mr-2" />
-                                                    Public
-                                                </div>
-                                            </SelectItem>
-                                            <SelectItem value="private">
-                                                <div className="flex items-center">
-                                                    <LockIcon className="size-4 mr-2" />
-                                                    Private
-                                                </div>
-                                            </SelectItem>
-                                                
+                                                <SelectItem value="public">
+                                                    <div className="flex items-center">
+                                                        <Globe2Icon className="size-4 mr-2" />
+                                                        Public
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem value="private">
+                                                    <div className="flex items-center">
+                                                        <LockIcon className="size-4 mr-2" />
+                                                        Private
+                                                    </div>
+                                                </SelectItem>
+
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />

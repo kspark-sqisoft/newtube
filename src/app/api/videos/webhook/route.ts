@@ -102,6 +102,7 @@ export const POST = async (request: NextRequest) => {
           .set({
             muxPlaybackId: playbackId,
             muxStatus: data.status,
+            muxAssetId: data.id,
             thumbnailUrl,
             thumbnailKey,
             previewUrl,
