@@ -78,7 +78,7 @@ const FormSectionSkeleton = () => {
         </div>
         <Skeleton className="h-9 w-24" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="space-y-8 lg:col-span-3">
           <div className="space-y-2">
             <Skeleton className="h-5 w-16" />
@@ -173,7 +173,7 @@ const FormSectionSuspense = ({ videoId }: FormSectionProps) => {
     update.mutate(data);
   };
   //TODO: Change if deploying outside of VERCEL
-  const fullUrl = `${APP_URL || "http://localhost:3000"}/videos/${video.id}`;
+  const fullUrl = `${APP_URL}/videos/${video.id}`;
   const [isCopied, setIsCopied] = useState(false);
   const onCopy = async () => {
     await navigator.clipboard.writeText(fullUrl);

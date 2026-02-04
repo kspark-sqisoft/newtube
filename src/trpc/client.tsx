@@ -23,15 +23,15 @@ function getQueryClient() {
 function getUrl() {
   const base = (() => {
     if (typeof window !== "undefined") return "";
-    if (APP_URL) return `https://${APP_URL}`;
-    return "http://localhost:3000";
+    //Crucial to modify in .env to production domain (including protocol)
+    return APP_URL;
   })();
   return `${base}/api/trpc`;
 }
 export function TRPCProvider(
   props: Readonly<{
     children: React.ReactNode;
-  }>
+  }>,
 ) {
   // NOTE: Avoid useState when initializing the query client if you don't
   //       have a suspense boundary between this and the code that may
@@ -51,7 +51,7 @@ export function TRPCProvider(
           },
         }),
       ],
-    })
+    }),
   );
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
