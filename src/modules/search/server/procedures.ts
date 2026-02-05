@@ -4,9 +4,7 @@ import { users, videoReactions, videos, videoViews } from "@/db/schema";
 import { baseProcedure, createTRPCRouter } from "@/trpc/init";
 import { and, desc, eq, getTableColumns, ilike, lt, or } from "drizzle-orm";
 
-
 export const searchRouter = createTRPCRouter({
-
   getMany: baseProcedure
     .input(
       z.object({
@@ -19,31 +17,36 @@ export const searchRouter = createTRPCRouter({
           })
           .nullish(),
         limit: z.number().min(1).max(100),
-      })
+      }),
     )
     .query(async ({ input }) => {
       const { cursor, limit, query, categoryId } = input;
-      
 
       const data = await db
         .select({
-            ...getTableColumns(videos),
-            user:users,
-            viewCount:db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-            likeCount:db.$count(videoReactions, and(
-                eq(videoReactions.videoId, videos.id),
-                eq(videoReactions.type, "like"),
-            )),
-            dislikeCount:db.$count(videoReactions, and(
-                eq(videoReactions.videoId, videos.id),
-                eq(videoReactions.type, "dislike"),
-            )),
-        }
-        )
+          ...getTableColumns(videos),
+          user: users,
+          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
+          likeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "like"),
+            ),
+          ),
+          dislikeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "dislike"),
+            ),
+          ),
+        })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
         .where(
           and(
+            eq(videos.visibility, "public"),
             ilike(videos.title, `%${query}%`),
             categoryId ? eq(videos.categoryId, categoryId) : undefined,
             cursor
@@ -51,11 +54,11 @@ export const searchRouter = createTRPCRouter({
                   lt(videos.updatedAt, cursor.updatedAt),
                   and(
                     eq(videos.updatedAt, cursor.updatedAt),
-                    lt(videos.id, cursor.id)
-                  )
+                    lt(videos.id, cursor.id),
+                  ),
                 )
-              : undefined
-          )
+              : undefined,
+          ),
         )
         .orderBy(desc(videos.updatedAt), desc(videos.id))
         //요청한 항목 수보다 항상 한 개 더 조회하여 다음 배치에 추가로 로드할 데이터가 있는지 확인할 수 있게 함
