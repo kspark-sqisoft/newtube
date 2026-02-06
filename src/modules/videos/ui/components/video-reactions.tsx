@@ -22,10 +22,11 @@ export const VideoReactions = ({ videoId, likes, dislikes, viewerReaction }: Vid
     const like = trpc.videoReactions.like.useMutation({
         onSuccess: () => {
             utils.videos.getOne.invalidate({ id: videoId });
+            utils.playlists.getLiked.invalidate();
         },
         onError: (error) => {
             toast.error("Something went wrong");
-            if(error.data?.code === "UNAUTHORIZED") {
+            if (error.data?.code === "UNAUTHORIZED") {
                 clerk.openSignIn();
             }
         },
@@ -34,10 +35,11 @@ export const VideoReactions = ({ videoId, likes, dislikes, viewerReaction }: Vid
     const dislike = trpc.videoReactions.dislike.useMutation({
         onSuccess: () => {
             utils.videos.getOne.invalidate({ id: videoId });
+            utils.playlists.getLiked.invalidate();
         },
         onError: (error) => {
             toast.error("Something went wrong");
-            if(error.data?.code === "UNAUTHORIZED") {
+            if (error.data?.code === "UNAUTHORIZED") {
                 clerk.openSignIn();
             }
         },

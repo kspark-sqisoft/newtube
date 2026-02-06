@@ -24,7 +24,93 @@ import { z } from "zod";
 
 export const playlistsRouter = createTRPCRouter({
 
-  getHistory: protectedProcedure
+  getLiked: protectedProcedure
+    .input(
+      z.object({
+        
+        cursor: z
+          .object({
+            id: z.string().uuid(),
+            likedAt: z.date(),
+          })
+          .nullish(),
+        limit: z.number().min(1).max(100),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { id: userId } = ctx.user;
+      const { cursor, limit, } = input;
+
+      const viewerVideoReactions = db.$with("viewer_video_reactions").as(
+        db.select({
+          videoId: videoReactions.videoId,
+          likedAt: videoReactions.updatedAt,
+        }).from(videoReactions).where(and(eq(videoReactions.userId, userId), eq(videoReactions.type, "like")))
+      );
+
+      const data = await db
+        .with(viewerVideoReactions)
+        .select({
+          ...getTableColumns(videos),
+          user: users,
+          likedAt: viewerVideoReactions.likedAt,
+          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
+          likeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "like"),
+            ),
+          ),
+          dislikeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "dislike"),
+            ),
+          ),
+        })
+        .from(videos)
+        .innerJoin(users, eq(videos.userId, users.id))
+        .innerJoin(viewerVideoReactions, eq(videos.id, viewerVideoReactions.videoId))
+        .where(
+          and(
+            eq(videos.visibility, "public"),
+            
+            cursor
+              ? or(
+                  lt(viewerVideoReactions.likedAt, cursor.likedAt),
+                  and(
+                    eq(viewerVideoReactions.likedAt, cursor.likedAt),
+                    lt(videos.id, cursor.id),
+                  ),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(viewerVideoReactions.likedAt), desc(videos.id))
+        //요청한 항목 수보다 항상 한 개 더 조회하여 다음 배치에 추가로 로드할 데이터가 있는지 확인할 수 있게 함
+        .limit(limit + 1);
+
+      const hasMore = data.length > limit;
+      //Remove the last item if there is more data
+      const items = hasMore ? data.slice(0, -1) : data;
+      const lastItem = items[items.length - 1];
+      const nextCursor = hasMore
+        ? {
+            id: lastItem.id,
+            likedAt: lastItem.likedAt,
+          }
+        : null;
+
+      return {
+        items,
+        nextCursor,
+      };
+    }),
+
+
+    getHistory: protectedProcedure
     .input(
       z.object({
         
