@@ -1,0 +1,114 @@
+import { db } from "@/db";
+import {
+  users,
+  videoReactions,
+  videos,
+  videoViews,
+} from "@/db/schema";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+} from "@/trpc/init";
+
+import {
+  and,
+  eq,
+  getTableColumns,
+  
+  or,
+  lt,
+  desc,
+} from "drizzle-orm";
+import { z } from "zod";
+
+
+export const playlistsRouter = createTRPCRouter({
+
+  getHistory: protectedProcedure
+    .input(
+      z.object({
+        
+        cursor: z
+          .object({
+            id: z.string().uuid(),
+            viewedAt: z.date(),
+          })
+          .nullish(),
+        limit: z.number().min(1).max(100),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { id: userId } = ctx.user;
+      const { cursor, limit, } = input;
+
+      const viewerVideoViews = db.$with("viewer_video_views").as(
+        db.select({
+          videoId: videoViews.videoId,
+          viewedAt: videoViews.updatedAt,
+        }).from(videoViews).where(eq(videoViews.userId, userId))
+      );
+
+      const data = await db
+        .with(viewerVideoViews)
+        .select({
+          ...getTableColumns(videos),
+          user: users,
+          viewedAt: viewerVideoViews.viewedAt,
+          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
+          likeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "like"),
+            ),
+          ),
+          dislikeCount: db.$count(
+            videoReactions,
+            and(
+              eq(videoReactions.videoId, videos.id),
+              eq(videoReactions.type, "dislike"),
+            ),
+          ),
+        })
+        .from(videos)
+        .innerJoin(users, eq(videos.userId, users.id))
+        .innerJoin(viewerVideoViews, eq(videos.id, viewerVideoViews.videoId))
+        .where(
+          and(
+            eq(videos.visibility, "public"),
+            
+            cursor
+              ? or(
+                  lt(viewerVideoViews.viewedAt, cursor.viewedAt),
+                  and(
+                    eq(viewerVideoViews.viewedAt, cursor.viewedAt),
+                    lt(videos.id, cursor.id),
+                  ),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(viewerVideoViews.viewedAt), desc(videos.id))
+        //요청한 항목 수보다 항상 한 개 더 조회하여 다음 배치에 추가로 로드할 데이터가 있는지 확인할 수 있게 함
+        .limit(limit + 1);
+
+      const hasMore = data.length > limit;
+      //Remove the last item if there is more data
+      const items = hasMore ? data.slice(0, -1) : data;
+      const lastItem = items[items.length - 1];
+      const nextCursor = hasMore
+        ? {
+            id: lastItem.id,
+            viewedAt: lastItem.viewedAt,
+          }
+        : null;
+
+      return {
+        items,
+        nextCursor,
+      };
+    }),
+
+  
+  
+});
