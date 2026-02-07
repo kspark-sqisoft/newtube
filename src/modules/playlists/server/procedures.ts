@@ -1,5 +1,7 @@
 import { db } from "@/db";
 import {
+  playlists,
+  playlistVideos,
   users,
   videoReactions,
   videos,
@@ -9,6 +11,7 @@ import {
   createTRPCRouter,
   protectedProcedure,
 } from "@/trpc/init";
+import { TRPCError } from "@trpc/server";
 
 import {
   and,
@@ -23,6 +26,98 @@ import { z } from "zod";
 
 
 export const playlistsRouter = createTRPCRouter({
+
+  getMany: protectedProcedure
+    .input(
+      z.object({
+        
+        cursor: z
+          .object({
+            id: z.string().uuid(),
+            updatedAt: z.date(),
+          })
+          .nullish(),
+        limit: z.number().min(1).max(100),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { id: userId } = ctx.user;
+      const { cursor, limit, } = input;
+
+
+      const data = await db
+        .select({
+          ...getTableColumns(playlists),
+          videoCount: db.$count(playlistVideos, eq(playlistVideos.playlistId, playlists.id)),
+          user:users
+        })
+        .from(playlists)
+        .innerJoin(users, eq(playlists.userId, users.id))
+        .where(
+          and(
+            eq(playlists.userId, userId),
+            
+            cursor
+              ? or(
+                  lt(playlists.updatedAt, cursor.updatedAt),
+                  and(
+                    eq(playlists.updatedAt, cursor.updatedAt),
+                    lt(playlists.id, cursor.id),
+                  ),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(playlists.updatedAt), desc(playlists.id))
+        //요청한 항목 수보다 항상 한 개 더 조회하여 다음 배치에 추가로 로드할 데이터가 있는지 확인할 수 있게 함
+        .limit(limit + 1);
+
+      const hasMore = data.length > limit;
+      //Remove the last item if there is more data
+      const items = hasMore ? data.slice(0, -1) : data;
+      const lastItem = items[items.length - 1];
+      const nextCursor = hasMore
+        ? {
+            id: lastItem.id,
+            updatedAt: lastItem.updatedAt,
+          }
+        : null;
+
+      return {
+        items,
+        nextCursor,
+      };
+    }),
+
+
+  create: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { id: userId } = ctx.user;
+      const { name } = input;
+
+      const [createdPlaylist] = await db
+        .insert(playlists)
+        .values({
+          name,
+          userId,
+        })
+        .returning();
+
+      if (!createdPlaylist) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+        });
+      }
+
+      return createdPlaylist;
+    }),
+
+
 
   getLiked: protectedProcedure
     .input(
