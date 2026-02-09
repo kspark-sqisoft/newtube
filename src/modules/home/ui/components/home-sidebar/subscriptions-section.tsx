@@ -20,14 +20,14 @@ import { usePathname } from "next/navigation";
 export const LoadingSkeleton = () => {
   return (
     <>
-      {[1, 2, 3, 4].map((i) => {
+      {[1, 2, 3, 4].map((i) => (
         <SidebarMenuItem key={i}>
           <SidebarMenuButton disabled>
             <Skeleton className="size-6 rounded-full shrink-0" />
             <Skeleton className="h-4 w-full" />
           </SidebarMenuButton>
         </SidebarMenuItem>
-      })}
+      ))}
     </>
   );
 };
