@@ -64,7 +64,7 @@ const VideoSectionSkeleton = () => {
                   <Skeleton className="h-4 w-20" />
                 </TableCell>
                 <TableCell>
-                <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-3 w-24" />
@@ -73,10 +73,10 @@ const VideoSectionSkeleton = () => {
                   <Skeleton className="h-3 w-12 ml-auto" />
                 </TableCell>
                 <TableCell className="text-right">
-                <Skeleton className="h-3 w-12 ml-auto" />
+                  <Skeleton className="h-3 w-12 ml-auto" />
                 </TableCell>
                 <TableCell className="text-right pr-6">
-                <Skeleton className="h-3 w-12 ml-auto" />
+                  <Skeleton className="h-3 w-12 ml-auto" />
                 </TableCell>
               </TableRow>
             ))}
@@ -125,8 +125,8 @@ export const VideosSectionSuspense = () => {
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-4">
                         <div className="relative aspect-video w-36 shrink-0">
-                          <VideoThumbnail 
-                            imageUrl={video.thumbnailUrl} 
+                          <VideoThumbnail
+                            imageUrl={video.thumbnailUrl}
                             previewUrl={video.previewUrl}
                             title={video.title}
                             duration={video.duration || 0}
@@ -143,7 +143,7 @@ export const VideosSectionSuspense = () => {
                         {
                           video.visibility === "private" ? (
                             <LockIcon className="size-4 mr-2" />
-                          ):(
+                          ) : (
                             <Globe2Icon className="size-4 mr-2" />
                           )
                         }
@@ -158,9 +158,9 @@ export const VideosSectionSuspense = () => {
                     <TableCell className="text-sm truncate">
                       {format(new Date(video.createdAt), "d MMM yyyy")}
                     </TableCell>
-                    <TableCell className="text-right text-sm">views</TableCell>
-                    <TableCell className="text-right text-sm">comments</TableCell>
-                    <TableCell className="text-right text-sm pr-6">likes</TableCell>
+                    <TableCell className="text-right text-sm">{video.viewCount}</TableCell>
+                    <TableCell className="text-right text-sm">{video.commentCount}</TableCell>
+                    <TableCell className="text-right text-sm pr-6">{video.likeCount}</TableCell>
                   </TableRow>
                 </Link>
               ))}
