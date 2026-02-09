@@ -28,6 +28,7 @@ const UserPageBanner = ({ user }: UserPageBannerProps) => {
             )}
                 style={{
                     backgroundImage: user.bannerUrl ? `url(${user.bannerUrl})` : undefined,
+                    backgroundSize: "cover",
                 }}
             >
                 {
