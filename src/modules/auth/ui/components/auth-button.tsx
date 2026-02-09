@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserButton, SignInButton, useUser, useClerk } from "@clerk/nextjs";
-import { ClapperboardIcon, UserCircleIcon } from "lucide-react";
+import { ClapperboardIcon, UserCircleIcon, UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export const AuthButton = () => {
@@ -24,6 +24,11 @@ export const AuthButton = () => {
     return (
       <UserButton>
         <UserButton.MenuItems>
+          <UserButton.Link
+            href="/users/current"
+            label="My profile"
+            labelIcon={<UserIcon className="size-4" />}
+          />
           <UserButton.Link
             href="/studio"
             label="Studio"
