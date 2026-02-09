@@ -1,3 +1,4 @@
+"use client";
 import { cn } from "@/lib/utils";
 import { UserGetOneOutput } from "../../types";
 import { useAuth } from "@clerk/nextjs";
