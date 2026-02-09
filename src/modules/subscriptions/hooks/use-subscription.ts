@@ -1,6 +1,6 @@
-import { toast} from "sonner";
+import { toast } from "sonner";
 import { useClerk } from "@clerk/nextjs";
-import {trpc} from "@/trpc/client";
+import { trpc } from "@/trpc/client";
 
 interface UseSubscriptionProps {
     userId: string;
@@ -8,25 +8,25 @@ interface UseSubscriptionProps {
     fromVideoId?: string;
 }
 
-export const useSubscription = ({userId, isSubscribed, fromVideoId}: UseSubscriptionProps) => {
+export const useSubscription = ({ userId, isSubscribed, fromVideoId }: UseSubscriptionProps) => {
     const clerk = useClerk();
     const utils = trpc.useUtils();
 
     const subscribe = trpc.subscriptions.create.useMutation({
         onSuccess: () => {
             toast.success("Subscribed");
-            //TODO: reinvalidate subscriptions.getMany
+            utils.subscriptions.getMany.invalidate();
             utils.videos.getManySubscribed.invalidate();
-            utils.users.getOne.invalidate({id:userId});
+            utils.users.getOne.invalidate({ id: userId });
 
 
-            if(fromVideoId){
-                utils.videos.getOne.invalidate({id:fromVideoId});
+            if (fromVideoId) {
+                utils.videos.getOne.invalidate({ id: fromVideoId });
             }
         },
         onError: (error) => {
             toast.error("Something went wrong");
-            if(error.data?.code == "UNAUTHORIZED"){
+            if (error.data?.code == "UNAUTHORIZED") {
                 clerk.openSignIn();
             }
         }
@@ -35,17 +35,17 @@ export const useSubscription = ({userId, isSubscribed, fromVideoId}: UseSubscrip
     const unsubscribe = trpc.subscriptions.remove.useMutation({
         onSuccess: () => {
             toast.success("UnSubscribed");
-            //TODO: reinvalidate subscriptions.getMany
+            utils.subscriptions.getMany.invalidate();
             utils.videos.getManySubscribed.invalidate();
-            utils.users.getOne.invalidate({id:userId});
+            utils.users.getOne.invalidate({ id: userId });
 
-            if(fromVideoId){
-                utils.videos.getOne.invalidate({id:fromVideoId});
+            if (fromVideoId) {
+                utils.videos.getOne.invalidate({ id: fromVideoId });
             }
         },
         onError: (error) => {
             toast.error("Something went wrong");
-            if(error.data?.code == "UNAUTHORIZED"){
+            if (error.data?.code == "UNAUTHORIZED") {
                 clerk.openSignIn();
             }
         }
@@ -53,11 +53,11 @@ export const useSubscription = ({userId, isSubscribed, fromVideoId}: UseSubscrip
 
     const isPending = subscribe.isPending || unsubscribe.isPending;
 
-    const onClick = () =>{
-        if(isSubscribed){
-            unsubscribe.mutate({userId});
+    const onClick = () => {
+        if (isSubscribed) {
+            unsubscribe.mutate({ userId });
         } else {
-            subscribe.mutate({userId});
+            subscribe.mutate({ userId });
         }
     }
 
