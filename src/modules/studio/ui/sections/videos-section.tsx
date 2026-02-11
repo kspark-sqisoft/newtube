@@ -94,7 +94,7 @@ export const VideosSectionSuspense = () => {
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
-    }
+    },
   );
 
   return (
@@ -117,6 +117,7 @@ export const VideosSectionSuspense = () => {
               .flatMap((page) => page.items)
               .map((video) => (
                 <Link
+                  prefetch
                   href={`/studio/videos/${video.id}`}
                   key={video.id}
                   legacyBehavior
@@ -133,20 +134,22 @@ export const VideosSectionSuspense = () => {
                           />
                         </div>
                         <div className="flex flex-col overflow-hidden gap-y-1">
-                          <span className="text-sm line-clamp-1">{video.title}</span>
-                          <span className="text-xs line-clamp-1 text-muted-foreground">{video.description || "no description"}</span>
+                          <span className="text-sm line-clamp-1">
+                            {video.title}
+                          </span>
+                          <span className="text-xs line-clamp-1 text-muted-foreground">
+                            {video.description || "no description"}
+                          </span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        {
-                          video.visibility === "private" ? (
-                            <LockIcon className="size-4 mr-2" />
-                          ) : (
-                            <Globe2Icon className="size-4 mr-2" />
-                          )
-                        }
+                        {video.visibility === "private" ? (
+                          <LockIcon className="size-4 mr-2" />
+                        ) : (
+                          <Globe2Icon className="size-4 mr-2" />
+                        )}
                         {snakeCaseToTitleCase(video.visibility)}
                       </div>
                     </TableCell>
@@ -158,9 +161,15 @@ export const VideosSectionSuspense = () => {
                     <TableCell className="text-sm truncate">
                       {format(new Date(video.createdAt), "d MMM yyyy")}
                     </TableCell>
-                    <TableCell className="text-right text-sm">{video.viewCount}</TableCell>
-                    <TableCell className="text-right text-sm">{video.commentCount}</TableCell>
-                    <TableCell className="text-right text-sm pr-6">{video.likeCount}</TableCell>
+                    <TableCell className="text-right text-sm">
+                      {video.viewCount}
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {video.commentCount}
+                    </TableCell>
+                    <TableCell className="text-right text-sm pr-6">
+                      {video.likeCount}
+                    </TableCell>
                   </TableRow>
                 </Link>
               ))}
