@@ -13,7 +13,6 @@ import {
 import {
   ChevronDownIcon,
   ChevronUpIcon,
-  MessageSquareIcon,
   MoreVerticalIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
@@ -151,7 +150,7 @@ export const CommentItem = ({
             )}
           </div>
         </div>
-        {comment.user.clerkId !== userId && variant === "comment" && (
+        {userId && comment.user.clerkId === userId && (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-8">
@@ -159,21 +158,14 @@ export const CommentItem = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setIsReplyOpen(true)}>
-                <MessageSquareIcon className="size-4" />
-                Reply
+              <DropdownMenuItem
+                onClick={() => {
+                  remove.mutate({ id: comment.id });
+                }}
+              >
+                <Trash2Icon className="size-4" />
+                Delete
               </DropdownMenuItem>
-
-              {comment.user.clerkId === userId && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    remove.mutate({ id: comment.id });
-                  }}
-                >
-                  <Trash2Icon className="size-4" />
-                  Delete
-                </DropdownMenuItem>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
