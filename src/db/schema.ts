@@ -1,3 +1,4 @@
+// DB 스키마 (Drizzle + Zod)
 import { relations } from "drizzle-orm";
 import {
   pgTable,
@@ -10,26 +11,37 @@ import {
   primaryKey,
   foreignKey,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
 
+// 좋아요/싫어요 타입
 export const reactionType = pgEnum("reaction_type", ["like", "dislike"]);
 
-export const playlistVideos = pgTable("playlist_videos", {
-  playlistId: uuid("playlist_id")
-    .references(() => playlists.id, { onDelete: "cascade" })
-    .notNull(),
-  videoId: uuid("video_id")
-    .references(() => videos.id, { onDelete: "cascade" })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t) => [
-  primaryKey({
-    name: "playlist_videos_pk",
-    columns: [t.playlistId, t.videoId],
-  }),
-]);
+// 재생목록-영상 N:M 매핑
+export const playlistVideos = pgTable(
+  "playlist_videos",
+  {
+    playlistId: uuid("playlist_id")
+      .references(() => playlists.id, { onDelete: "cascade" })
+      .notNull(),
+    videoId: uuid("video_id")
+      .references(() => videos.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "playlist_videos_pk",
+      columns: [t.playlistId, t.videoId],
+    }),
+  ],
+);
 
+// playlistVideos → playlist, video
 export const playlistVideosRelations = relations(playlistVideos, ({ one }) => ({
   playlist: one(playlists, {
     fields: [playlistVideos.playlistId],
@@ -41,6 +53,7 @@ export const playlistVideosRelations = relations(playlistVideos, ({ one }) => ({
   }),
 }));
 
+// 재생목록
 export const playlists = pgTable("playlists", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -54,6 +67,7 @@ export const playlists = pgTable("playlists", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// playlists → user, playlistVideos[]
 export const playlistRelations = relations(playlists, ({ one, many }) => ({
   user: one(users, {
     fields: [playlists.userId],
@@ -62,8 +76,7 @@ export const playlistRelations = relations(playlists, ({ one, many }) => ({
   playlistVideos: many(playlistVideos),
 }));
 
-
-
+// 사용자 (Clerk 연동)
 export const users = pgTable(
   "users",
   {
@@ -76,45 +89,61 @@ export const users = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("clerk_id_idx").on(t.clerkId)]
+  (t) => [uniqueIndex("clerk_id_idx").on(t.clerkId)],
 );
 
+// users → videos[], videoViews[], subscriptions[], comments[], playlists[] 등
 export const userRelations = relations(users, ({ many }) => ({
   videos: many(videos),
   videoViews: many(videoViews),
   videoReactions: many(videoReactions),
-  subscriptions: many(subscriptions, {relationName:"subscriptions_viewer_id_fkey"}),
-  subscribers: many(subscriptions, {relationName:"subscriptions_creator_id_fkey"}),
+  subscriptions: many(subscriptions, {
+    relationName: "subscriptions_viewer_id_fkey",
+  }),
+  subscribers: many(subscriptions, {
+    relationName: "subscriptions_creator_id_fkey",
+  }),
   comments: many(comments),
   commentReactions: many(commentReactions),
   playlists: many(playlists),
 }));
 
-export const subscriptions = pgTable("subscriptions", {
-  viewerId: uuid("viewer_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  creatorId: uuid("creator_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t)=>[
-  primaryKey({
-    name:"subscriptions_pk",
-    columns:[t.viewerId, t.creatorId],
-  })
-]);
+// 채널 구독   구독자(viewer) → 크리에이터(creator)” 관계, (viewerId, creatorId) 복합 PK로 한 사용자가 같은 채널을 한 번만 구독.
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    viewerId: uuid("viewer_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    creatorId: uuid("creator_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "subscriptions_pk",
+      columns: [t.viewerId, t.creatorId],
+    }),
+  ],
+);
 
+// subscriptions → viewer(user), creator(user)
 export const subscriptionRelations = relations(subscriptions, ({ one }) => ({
   viewer: one(users, {
     fields: [subscriptions.viewerId],
     references: [users.id],
-    relationName:"subscriptions_viewer_id_fkey",
+    relationName: "subscriptions_viewer_id_fkey",
   }),
   creator: one(users, {
     fields: [subscriptions.creatorId],
     references: [users.id],
-    relationName:"subscriptions_creator_id_fkey",
+    relationName: "subscriptions_creator_id_fkey",
   }),
 }));
 
+// 영상 카테고리
 export const categories = pgTable(
   "categories",
   {
@@ -124,15 +153,21 @@ export const categories = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("name_idx").on(t.name)]
+  (t) => [uniqueIndex("name_idx").on(t.name)],
 );
 
+// 해강 카테고리에 속한 영상들 videos[]
 export const categoryRelations = relations(categories, ({ many }) => ({
   videos: many(videos),
 }));
 
-export const videoVisibility = pgEnum("video_visibility", ["public", "private"]);
+// 영상 공개 여부
+export const videoVisibility = pgEnum("video_visibility", [
+  "public",
+  "private",
+]);
 
+// 영상 (Mux 스트리밍 메타 포함)
 export const videos = pgTable("videos", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
@@ -168,7 +203,8 @@ export const videoInsertSchema = createInsertSchema(videos);
 export const videoUpdateSchema = createUpdateSchema(videos);
 export const videoSelectSchema = createSelectSchema(videos);
 
-//어플리케이션 레벨에서만 사용되는 관계(마이그레이션 에 영향 끼치지 않음)bunx drizzle-kit push
+// videos → user, category, views[], reactions[], comments[], playlistVideos[]
+// user: 업로더 (users 1명), category: 카테고리 (categories 1개), views: 조회수 (videoViews[]), reactions: 좋아요/싫어요 (videoReactions[]), comments: 댓글 (comments[]), playlistVideos: 재생목록 (playlistVideos[])
 export const videoRelations = relations(videos, ({ one, many }) => ({
   user: one(users, {
     fields: [videos.userId],
@@ -184,24 +220,34 @@ export const videoRelations = relations(videos, ({ one, many }) => ({
   playlistVideos: many(playlistVideos),
 }));
 
-export const comments = pgTable("comments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  parentId: uuid("parent_id"),
-  userId: uuid("user_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  videoId: uuid("video_id").references(()=>videos.id, {onDelete: "cascade"}).notNull(),
-  value: text("value").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t)=>{
-  return[
-    foreignKey({
-      columns: [t.parentId],
-      foreignColumns: [t.id],
-      name: "comments_parent_id_fkey",
-    }).onDelete("cascade")
-  ];
-});
+// 댓글 (parentId 있으면 대댓글)
+export const comments = pgTable(
+  "comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parentId: uuid("parent_id"),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    videoId: uuid("video_id")
+      .references(() => videos.id, { onDelete: "cascade" })
+      .notNull(),
+    value: text("value").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => {
+    return [
+      foreignKey({
+        columns: [t.parentId],
+        foreignColumns: [t.id],
+        name: "comments_parent_id_fkey",
+      }).onDelete("cascade"),
+    ];
+  },
+);
 
+// comments → user, video, parent(comment), reactions[], replies[]
 export const commentRelations = relations(comments, ({ one, many }) => ({
   user: one(users, {
     fields: [comments.userId],
@@ -217,51 +263,75 @@ export const commentRelations = relations(comments, ({ one, many }) => ({
     relationName: "comments_parent_id_fkey",
   }),
   reactions: many(commentReactions),
-  replies:many(comments,{
+  replies: many(comments, {
     relationName: "comments_parent_id_fkey",
-  })
+  }),
 }));
 
 export const commentInsertSchema = createInsertSchema(comments);
 export const commentSelectSchema = createSelectSchema(comments);
 export const commentUpdateSchema = createUpdateSchema(comments);
 
-export const commentReactions = pgTable("comment_reactions", {
-  userId: uuid("user_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  commentId: uuid("comment_id").references(()=>comments.id, {onDelete: "cascade"}).notNull(),
-  type: reactionType("type").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t)=>[
-  primaryKey({
-    name:"comment_reactions_pk",
-    columns:[t.userId, t.commentId],
-  })
-]);
+// 댓글 좋아요/싫어요
+export const commentReactions = pgTable(
+  "comment_reactions",
+  {
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    commentId: uuid("comment_id")
+      .references(() => comments.id, { onDelete: "cascade" })
+      .notNull(),
+    type: reactionType("type").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "comment_reactions_pk",
+      columns: [t.userId, t.commentId],
+    }),
+  ],
+);
 
-export const commentReactionRelations = relations(commentReactions, ({ one }) => ({
-  user: one(users, {
-    fields: [commentReactions.userId],
-    references: [users.id],
+// commentReactions → user, comment
+export const commentReactionRelations = relations(
+  commentReactions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [commentReactions.userId],
+      references: [users.id],
+    }),
+    comment: one(comments, {
+      fields: [commentReactions.commentId],
+      references: [comments.id],
+    }),
   }),
-  comment: one(comments, {
-    fields: [commentReactions.commentId],
-    references: [comments.id],
-  }),
-}));
+);
 
-export const videoViews = pgTable("video_views", {
-  userId: uuid("user_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  videoId: uuid("video_id").references(()=>videos.id, {onDelete: "cascade"}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t)=>[
-  primaryKey({
-    name:"video_views_pk",
-    columns:[t.userId, t.videoId],
-  })
-]);
+// 영상 시청 기록 (유저별 1회)
+// user: 시청한 사용자(users 1명), video: 시청한 영상(videos 1개)
+export const videoViews = pgTable(
+  "video_views",
+  {
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    videoId: uuid("video_id")
+      .references(() => videos.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "video_views_pk",
+      columns: [t.userId, t.videoId],
+    }),
+  ],
+);
 
+// videoViews → user, video
 export const videoViewsRelations = relations(videoViews, ({ one }) => ({
   user: one(users, {
     fields: [videoViews.userId],
@@ -277,21 +347,29 @@ export const videoViewSelectSchema = createSelectSchema(videoViews);
 export const videoViewInsertSchema = createInsertSchema(videoViews);
 export const videoViewUpdateSchema = createUpdateSchema(videoViews);
 
+// 영상 좋아요/싫어요  (userId, videoId) 복합 PK로 유저당 영상당 하나의 반응
+export const videoReactions = pgTable(
+  "video_reactions",
+  {
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    videoId: uuid("video_id")
+      .references(() => videos.id, { onDelete: "cascade" })
+      .notNull(),
+    type: reactionType("type").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "video_reactions_pk",
+      columns: [t.userId, t.videoId],
+    }),
+  ],
+);
 
-
-export const videoReactions = pgTable("video_reactions", {
-  userId: uuid("user_id").references(()=>users.id, {onDelete: "cascade"}).notNull(),
-  videoId: uuid("video_id").references(()=>videos.id, {onDelete: "cascade"}).notNull(),
-  type: reactionType("type").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t)=>[
-  primaryKey({
-    name:"video_reactions_pk",
-    columns:[t.userId, t.videoId],
-  })
-]);
-
+// videoReactions → user, video
 export const videoReactionsRelations = relations(videoReactions, ({ one }) => ({
   user: one(users, {
     fields: [videoReactions.userId],
