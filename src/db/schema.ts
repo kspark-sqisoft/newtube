@@ -37,6 +37,7 @@ export const playlistVideos = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
+    //규칙: 한 플레이리스트에 같은 영상이 한 번만 들어감 (유저 규칙은 아님).
     primaryKey({
       name: "playlist_videos_pk",
       columns: [t.playlistId, t.videoId],
@@ -95,7 +96,10 @@ export const users = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("clerk_id_idx").on(t.clerkId)],
+  (t) => [
+    //“clerk_id 컬럼에 clerk_id_idx라는 unique 인덱스를 걸어서, 값이 중복되지 않고 이 컬럼으로 조회가 빨라지게 한다”는 의미입니다.
+    uniqueIndex("clerk_id_idx").on(t.clerkId),
+  ],
 );
 
 // users → videos[], videoViews[], subscriptions[], comments[], playlists[] 등
@@ -131,6 +135,7 @@ export const subscriptions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
+    //규칙: 한 유저(viewer)가 한 채널(creator) 구독 한 번만.
     primaryKey({
       name: "subscriptions_pk",
       columns: [t.viewerId, t.creatorId],
@@ -162,7 +167,10 @@ export const categories = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("name_idx").on(t.name)],
+  (t) => [
+    //카테고리 이름은 중복될 수 없고, 이름으로 조회할 때 name_idx 인덱스를 쓴다
+    uniqueIndex("name_idx").on(t.name),
+  ],
 );
 
 // 해강 카테고리에 속한 영상들 videos[]
@@ -251,6 +259,7 @@ export const comments = pgTable(
   },
   (t) => {
     return [
+      //대댓글인 경우 부모 댓글을 참조하는 외래키 제약조건
       foreignKey({
         columns: [t.parentId],
         foreignColumns: [t.id],
@@ -302,6 +311,7 @@ export const commentReactions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
+    //규칙: 한 유저가 한 댓글에 반응(좋아요/싫어요) 한 번만.
     primaryKey({
       name: "comment_reactions_pk",
       columns: [t.userId, t.commentId],
@@ -342,6 +352,7 @@ export const videoViews = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
+    //규칙: 한 유저가 한 영상에 대한 시청 기록 1개만 (유저당 조회수 1회).
     primaryKey({
       name: "video_views_pk",
       columns: [t.userId, t.videoId],
@@ -383,6 +394,8 @@ export const videoReactions = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
+    //(user_id, video_id) 조합이 한 테이블 안에서 유일해야 한다는 제약입니다.
+    // “한 유저가 한 영상에 대해 반응(좋아요 또는 싫어요)을 한 번만 가질 수 있다”는 규칙이 DB 레벨에서 보장됩니다.
     primaryKey({
       name: "video_reactions_pk",
       columns: [t.userId, t.videoId],
