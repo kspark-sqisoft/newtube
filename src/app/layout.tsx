@@ -23,6 +23,7 @@ export default function RootLayout({
       <html lang="en">
         <body className={inter.className}>
           <Toaster />
+          {/* 모든 페이지에서 trpc 훅 사용 가능. */}
           <TRPCProvider>{children}</TRPCProvider>
         </body>
       </html>

@@ -20,14 +20,17 @@ import {
 // 좋아요/싫어요 타입
 export const reactionType = pgEnum("reaction_type", ["like", "dislike"]);
 
-// 재생목록-영상 N:M 매핑
+// playlists와 videos는 직접 1:1/1:N이 아니라, 중간 테이블 playlist_videos를 통한 N:M(다대다) 관계입니다.
+// 재생목록-영상 N:M 매핑  이 플레이리스트에 이 비디오가 들어 있다
+// 한 플레이리스트 → 여러 비디오 (playlist_videos 통해)
+// 한 비디오 → 여러 플레이리스트 (playlist_videos 통해)
 export const playlistVideos = pgTable(
   "playlist_videos",
   {
-    playlistId: uuid("playlist_id")
+    playlistId: uuid("playlist_id") //재생목록 ID
       .references(() => playlists.id, { onDelete: "cascade" })
       .notNull(),
-    videoId: uuid("video_id")
+    videoId: uuid("video_id") //영상 ID
       .references(() => videos.id, { onDelete: "cascade" })
       .notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -54,11 +57,13 @@ export const playlistVideosRelations = relations(playlistVideos, ({ one }) => ({
 }));
 
 // 재생목록
+// playlists와 users 관계는 1:N 관계입니다. 한 사용자가 여러 재생목록을 만들 수 있습니다.
+// 한 플레이리스트(playlists) → 한 사용자(users)에게만 속함
 export const playlists = pgTable("playlists", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  userId: uuid("user_id")
+  userId: uuid("user_id") //재생목록을 만든 사람
     .references(() => users.id, {
       onDelete: "cascade",
     })
@@ -70,10 +75,11 @@ export const playlists = pgTable("playlists", {
 // playlists → user, playlistVideos[]
 export const playlistRelations = relations(playlists, ({ one, many }) => ({
   user: one(users, {
+    //플레이리스트 -> 소유자 1명
     fields: [playlists.userId],
     references: [users.id],
   }),
-  playlistVideos: many(playlistVideos),
+  playlistVideos: many(playlistVideos), //플레이리스트 -> 영상 여러 개
 }));
 
 // 사용자 (Clerk 연동)
@@ -108,14 +114,17 @@ export const userRelations = relations(users, ({ many }) => ({
   playlists: many(playlists),
 }));
 
+// subscriptions 는 자체가 중간 테이블 입니다.
+// subscriptions는 users 테이블 하나를 viewer(구독자)와 creator(채널) 두 역할로 참조하는, users 간 N:M 관계를 담는 테이블입니다.
 // 채널 구독   구독자(viewer) → 크리에이터(creator)” 관계, (viewerId, creatorId) 복합 PK로 한 사용자가 같은 채널을 한 번만 구독.
+// 구독자는 다수의 크레에이터가 있고 크리에이터는 다수의 구독자가 있습니다.
 export const subscriptions = pgTable(
   "subscriptions",
   {
-    viewerId: uuid("viewer_id")
+    viewerId: uuid("viewer_id") //구독자
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    creatorId: uuid("creator_id")
+    creatorId: uuid("creator_id") //크리에이터
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -168,6 +177,8 @@ export const videoVisibility = pgEnum("video_visibility", [
 ]);
 
 // 영상 (Mux 스트리밍 메타 포함)
+// 한 카테고리 → 여러 비디오 (1:N)
+// 한 사용자(users) → 여러 비디오(videos) (1:N) 업로드 가능
 export const videos = pgTable("videos", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
@@ -185,7 +196,7 @@ export const videos = pgTable("videos", {
   previewKey: text("preview_key"),
   duration: integer("duration").default(0).notNull(),
   visibility: videoVisibility("visibility").default("private").notNull(),
-  userId: uuid("user_id")
+  userId: uuid("user_id") //업로더
     .references(() => users.id, {
       onDelete: "cascade",
     })
@@ -193,7 +204,7 @@ export const videos = pgTable("videos", {
 
   categoryId: uuid("category_id").references(() => categories.id, {
     onDelete: "set null",
-  }),
+  }), //카테고리
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -221,18 +232,20 @@ export const videoRelations = relations(videos, ({ one, many }) => ({
 }));
 
 // 댓글 (parentId 있으면 대댓글)
+// 한 사용자(users) → 여러 댓글(comments) 작성 가능 (1:N)
+// 한 영상(videos) → 여러 댓글(comments) 작성 가능 (1:N)
 export const comments = pgTable(
   "comments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    parentId: uuid("parent_id"),
-    userId: uuid("user_id")
+    parentId: uuid("parent_id"), //대댓글인 경우 부모 댓글 ID
+    userId: uuid("user_id") //댓글을 남긴 사람
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    videoId: uuid("video_id")
+    videoId: uuid("video_id") //댓글을 남긴 영상
       .references(() => videos.id, { onDelete: "cascade" })
       .notNull(),
-    value: text("value").notNull(),
+    value: text("value").notNull(), //댓글 내용
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -273,16 +286,18 @@ export const commentSelectSchema = createSelectSchema(comments);
 export const commentUpdateSchema = createUpdateSchema(comments);
 
 // 댓글 좋아요/싫어요
+// users (1) ──< comment_reactions (N) … 한 사용자가 여러 댓글에 반응 가능
+// comments (1) ──< comment_reactions (N) … 한 댓글에 여러 사용자의 반응 가능
 export const commentReactions = pgTable(
   "comment_reactions",
   {
-    userId: uuid("user_id")
+    userId: uuid("user_id") //반응을 남긴 사람
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    commentId: uuid("comment_id")
+    commentId: uuid("comment_id") //반응을 남긴 댓글
       .references(() => comments.id, { onDelete: "cascade" })
       .notNull(),
-    type: reactionType("type").notNull(),
+    type: reactionType("type").notNull(), //좋아요, 싫어요
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -311,13 +326,16 @@ export const commentReactionRelations = relations(
 
 // 영상 시청 기록 (유저별 1회)
 // user: 시청한 사용자(users 1명), video: 시청한 영상(videos 1개)
+// users (1) ──< video_views (N)	한 사용자가 여러 영상을 시청 → 여러 view 행
+// videos (1) ──< video_views (N)	한 영상을 여러 사용자가 시청 → 여러 view 행
+// users (1)  ──────<  video_views (N)  >──────  (1) videos
 export const videoViews = pgTable(
   "video_views",
   {
-    userId: uuid("user_id")
+    userId: uuid("user_id") //시청한 사람
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    videoId: uuid("video_id")
+    videoId: uuid("video_id") //시청한 영상
       .references(() => videos.id, { onDelete: "cascade" })
       .notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -348,16 +366,19 @@ export const videoViewInsertSchema = createInsertSchema(videoViews);
 export const videoViewUpdateSchema = createUpdateSchema(videoViews);
 
 // 영상 좋아요/싫어요  (userId, videoId) 복합 PK로 유저당 영상당 하나의 반응
+// users (1) ──< video_reactions (N)	한 사용자가 여러 영상에 반응 → 여러 reaction 행
+// videos (1) ──< video_reactions (N)	한 영상에 여러 사용자가 반응 → 여러 reaction 행
+// users (1)  ──────<  video_reactions (N)  >──────  (1) videos
 export const videoReactions = pgTable(
   "video_reactions",
   {
-    userId: uuid("user_id")
+    userId: uuid("user_id") //반응을 남긴 사람
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    videoId: uuid("video_id")
+    videoId: uuid("video_id") //반응을 남긴 영상
       .references(() => videos.id, { onDelete: "cascade" })
       .notNull(),
-    type: reactionType("type").notNull(),
+    type: reactionType("type").notNull(), //좋아요, 싫어요
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

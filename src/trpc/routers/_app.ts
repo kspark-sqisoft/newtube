@@ -12,6 +12,7 @@ import { searchRouter } from "@/modules/search/server/procedures";
 import { playlistsRouter } from "@/modules/playlists/server/procedures";
 import { usersRouter } from "@/modules/users/server/procedures";
 
+//createTRPCRouter로 하나의 appRouter를 만들고, 도메인별 라우터를 넣습니다.
 export const appRouter = createTRPCRouter({
   categories: categoriesRouter,
   studio: studioRouter,
@@ -26,5 +27,5 @@ export const appRouter = createTRPCRouter({
   playlists: playlistsRouter,
   users: usersRouter,
 });
-// export type definition of API
+//AppRouter 타입을 export 해서 클라이언트에서 타입 안전하게 사용합니다.
 export type AppRouter = typeof appRouter;

@@ -3,3 +3,6 @@ bunx drizzle-kit push
 bunx drizzle-kit studio
 
 bun src/scripts/seed-categories.ts
+
+//마이그레이션 SQL 파일 생성
+bunx drizzle-kit generate

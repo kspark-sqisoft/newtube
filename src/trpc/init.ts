@@ -7,6 +7,9 @@ import { cache } from "react";
 import superjson from "superjson";
 import { ratelimit } from "@/lib/ratelimit";
 
+//tRPC 서버 초기화
+
+// Clerk userId 등을 넣고, cache()로 요청당 한 번만 생성
 export const createTRPCContext = cache(async () => {
   const { userId } = await auth();
   return { clerkUserId: userId };
@@ -14,7 +17,7 @@ export const createTRPCContext = cache(async () => {
 
 export type Context = Awaited<ReturnType<typeof createTRPCContext>>;
 
-// Add your own context type here
+// tRPC 인스턴스 생성
 const t = initTRPC.context<Context>().create({
   /**
    * @see https://trpc.io/docs/server/data-transformers
@@ -22,47 +25,48 @@ const t = initTRPC.context<Context>().create({
   transformer: superjson,
 });
 
-// Base router and procedure helpers
+// 라우터/프로시저 헬퍼
 export const createTRPCRouter = t.router;
 export const createCallerFactory = t.createCallerFactory;
 export const baseProcedure = t.procedure;
 
-export const protectedProcedure = t.procedure.use(async function isAuthed(
-  opts
-) {
-  const { ctx } = opts;
+// 인증 필요한 프로시저
+export const protectedProcedure = t.procedure.use(
+  async function isAuthed(opts) {
+    const { ctx } = opts;
 
-  if (!ctx.clerkUserId) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You are not authorized to access this resource",
+    if (!ctx.clerkUserId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "You are not authorized to access this resource",
+      });
+    }
+
+    // Obtener los datos del usuario desde la base de datos
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.clerkId, ctx.clerkUserId))
+      .limit(1);
+
+    if (!user) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Not user found in database",
+      });
+    }
+    // Comprobar si el usuario ha superado el límite de peticiones
+
+    const { success } = await ratelimit.limit(user.id);
+    if (!success) {
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
+    }
+
+    return opts.next({
+      ctx: {
+        ...ctx,
+        user,
+      },
     });
-  }
-
-  // Obtener los datos del usuario desde la base de datos
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.clerkId, ctx.clerkUserId))
-    .limit(1);
-
-  if (!user) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "Not user found in database",
-    });
-  }
-  // Comprobar si el usuario ha superado el límite de peticiones
-
-  const { success } = await ratelimit.limit(user.id);
-  if (!success) {
-    throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
-  }
-
-  return opts.next({
-    ctx: {
-      ...ctx,
-      user,
-    },
-  });
-});
+  },
+);

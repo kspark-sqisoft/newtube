@@ -9,7 +9,7 @@ import { useState } from "react";
 import { makeQueryClient } from "./query-client";
 import type { AppRouter } from "./routers/_app";
 import { APP_URL } from "@/modules/videos/constants";
-
+//tRPC 클라이언트 생성
 export const trpc = createTRPCReact<AppRouter>();
 let clientQueryClientSingleton: QueryClient;
 function getQueryClient() {
@@ -37,6 +37,7 @@ export function TRPCProvider(
   //       have a suspense boundary between this and the code that may
   //       suspend because React will throw away the client on the initial
   //       render if it suspends and there is no boundary
+  //QueryClient는 싱글톤(브라우저) / 요청마다 새로(서버) 생성
   const queryClient = getQueryClient();
   const [trpcClient] = useState(() =>
     trpc.createClient({
