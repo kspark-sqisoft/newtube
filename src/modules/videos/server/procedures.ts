@@ -30,6 +30,7 @@ import { workflow } from "@/lib/workflow";
 
 //tRPC 라우터: createTRPCRouter로 비디오용 프로시저들을 하나의 라우터로 묶음
 export const videosRouter = createTRPCRouter({
+  //로그인한 사용자가 구독한 채널(크리에이터)의 공개 비디오만, 업로더·조회수·좋아요·싫어요를 포함해 updated_at 기준 커서 페이지네이션으로 반환한다.
   getManySubscribed: protectedProcedure
     .input(
       z.object({
@@ -46,13 +47,14 @@ export const videosRouter = createTRPCRouter({
       const { id: userId } = ctx.user;
       const { cursor, limit } = input;
 
+      //“viewer_id = 나(로그인 유저)인 구독 행에서, creator_id만 뽑아서 ‘내가 구독한 채널 ID 목록’으로 쓴다.”
       const viewerSubscriptions = db.$with("viewer_subscriptions").as(
         db
           .select({
-            userId: subscriptions.creatorId,
+            userId: subscriptions.creatorId, // creator_id를 userId라는 이름으로 선택, 이후 쿼리에서 users 테이블과 조인할 때 쓰기 위해서입니다.
           })
           .from(subscriptions)
-          .where(eq(subscriptions.viewerId, userId)),
+          .where(eq(subscriptions.viewerId, userId)), // viewer_id = 로그인한 나의 id
       );
 
       const data = await db
@@ -79,6 +81,7 @@ export const videosRouter = createTRPCRouter({
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
         .innerJoin(
+          // 업로더가 “구독한 채널 목록”에 있는 비디오만 남음
           viewerSubscriptions,
           eq(viewerSubscriptions.userId, users.id),
         )
@@ -117,6 +120,7 @@ export const videosRouter = createTRPCRouter({
       };
     }),
 
+  //공개 비디오를 조회수(viewCount) 순으로 정렬해서, 업로더·조회수·좋아요·싫어요를 포함해 viewCount 기준 커서 페이지네이션으로 반환한다.
   getManyTrending: baseProcedure
     .input(
       z.object({
@@ -194,8 +198,7 @@ export const videosRouter = createTRPCRouter({
         nextCursor,
       };
     }),
-  //비디오 목록 조회 (특정 카테고리/유저 필터, 커서 페이징), baseProcedure라서 로그인 없이도 호출 가능합니다.
-  //프로시저 정의와 입력 스키마
+  //공개 비디오 목록을 카테고리/채널(userId)로 필터하고, 업로더 정보와 조회수·좋아요·싫어요 수를 넣어서, updated_at 기준 커서 페이지네이션으로 한 번에 limit개만 반환한다.
   getMany: baseProcedure
     .input(
       z.object({

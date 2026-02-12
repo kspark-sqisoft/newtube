@@ -87,3 +87,90 @@ SELECT v.id,
 FROM videos v
 INNER JOIN users u ON v.user_id = u.id
 WHERE v.id = '72eae257-86f4-4632-8cc0-8b77b18b4cf5';
+
+-- src/modules/videos/server/procedures.ts
+-- getMany 스타일: 공개 비디오 목록 (업로더 + 조회수/좋아요/싫어요), Neon 콘솔에서 그대로 실행
+-- 필터/커서 없이 첫 페이지 20개. category_id, user_id, cursor 쓰려면 아래 주석 참고.
+SELECT v.id,
+       v.title,
+       v.description,
+       v.thumbnail_url,
+       v.duration,
+       v.visibility,
+       v.user_id,
+       v.category_id,
+       v.created_at,
+       v.updated_at,
+       to_jsonb(u) AS "user",
+       (SELECT COUNT(*)::int FROM video_views vv WHERE vv.video_id = v.id) AS "viewCount",
+       (SELECT COUNT(*)::int FROM video_reactions vr
+        WHERE vr.video_id = v.id AND vr.type = 'like') AS "likeCount",
+       (SELECT COUNT(*)::int FROM video_reactions vr
+        WHERE vr.video_id = v.id AND vr.type = 'dislike') AS "dislikeCount"
+FROM videos v
+INNER JOIN users u ON v.user_id = u.id
+WHERE v.visibility = 'public'
+  AND TRUE                    -- category 필터: AND (v.category_id = '원하는-category-uuid')
+  AND TRUE                    -- user 필터:     AND (v.user_id = '원하는-user-uuid')
+  AND TRUE                    -- 커서(다음페이지): AND (v.updated_at < '마지막행-updated_at' OR (v.updated_at = '...' AND v.id < '마지막행-id'))
+ORDER BY v.updated_at DESC, v.id DESC
+LIMIT 21;
+
+-- getManyTrending: 공개 비디오를 조회수 순으로, 업로더·viewCount·likeCount·dislikeCount 포함, 커서 페이지네이션
+WITH video_stats AS (
+  SELECT v.id,
+         v.title,
+         v.description,
+         v.thumbnail_url,
+         v.duration,
+         v.visibility,
+         v.user_id,
+         v.category_id,
+         v.created_at,
+         v.updated_at,
+         to_jsonb(u) AS "user",
+         (SELECT COUNT(*)::int FROM video_views vv WHERE vv.video_id = v.id) AS "viewCount",
+         (SELECT COUNT(*)::int FROM video_reactions vr
+          WHERE vr.video_id = v.id AND vr.type = 'like') AS "likeCount",
+         (SELECT COUNT(*)::int FROM video_reactions vr
+          WHERE vr.video_id = v.id AND vr.type = 'dislike') AS "dislikeCount"
+  FROM videos v
+  INNER JOIN users u ON v.user_id = u.id
+  WHERE v.visibility = 'public'
+)
+SELECT *
+FROM video_stats
+WHERE TRUE   -- 커서(다음 페이지): (viewCount < 마지막행_viewCount OR (viewCount = 마지막행_viewCount AND id < 마지막행_id))
+ORDER BY "viewCount" DESC, id DESC
+LIMIT 21;
+
+-- getManySubscribed: 로그인 사용자가 구독한 채널의 공개 비디오, updated_at 기준 커서 페이지네이션
+-- :viewer_id 자리에 '로그인한-사용자-uuid' 넣기
+WITH viewer_subscriptions AS (
+  SELECT creator_id AS user_id
+  FROM subscriptions
+  WHERE viewer_id = '로그인한-사용자-uuid'
+)
+SELECT v.id,
+       v.title,
+       v.description,
+       v.thumbnail_url,
+       v.duration,
+       v.visibility,
+       v.user_id,
+       v.category_id,
+       v.created_at,
+       v.updated_at,
+       to_jsonb(u) AS "user",
+       (SELECT COUNT(*)::int FROM video_views vv WHERE vv.video_id = v.id) AS "viewCount",
+       (SELECT COUNT(*)::int FROM video_reactions vr
+        WHERE vr.video_id = v.id AND vr.type = 'like') AS "likeCount",
+       (SELECT COUNT(*)::int FROM video_reactions vr
+        WHERE vr.video_id = v.id AND vr.type = 'dislike') AS "dislikeCount"
+FROM videos v
+INNER JOIN users u ON v.user_id = u.id
+INNER JOIN viewer_subscriptions vs ON vs.user_id = u.id
+WHERE v.visibility = 'public'
+  AND TRUE   -- 커서(다음 페이지): (v.updated_at < '마지막행_updated_at' OR (v.updated_at = '...' AND v.id < '마지막행_id'))
+ORDER BY v.updated_at DESC, v.id DESC
+LIMIT 21;
