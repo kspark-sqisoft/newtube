@@ -11,7 +11,7 @@ YouTube와 유사한 동영상 플랫폼을 **Next.js 15(App Router)**, **tRPC**
 3. [요청이 흐르는 길](#3-요청이-흐르는-길)
 4. [폴더 구조 읽는 법](#4-폴더-구조-읽는-법)
 5. [데이터베이스 설계 포인트](#5-데이터베이스-설계-포인트)
-6. [핵심 코드 패턴](#6-핵심-코드-패턴)
+6. [핵심 코드 패턴](#6-핵심-코드-패턴) (하위: [Zod로 입력 검증](#zod로-입력-검증), [낙관적 업데이트](#낙관적-업데이트), [인피니티 스크롤](#인피니티-스크롤))
 7. [웹훅과 업로드, 백그라운드 작업](#7-웹훅과-업로드-백그라운드-작업)
 8. [환경 변수와 로컬 실행](#8-환경-변수와-로컬-실행)
 9. [추천 학습 로드맵](#9-추천-학습-로드맵)
@@ -27,6 +27,7 @@ YouTube와 유사한 동영상 플랫폼을 **Next.js 15(App Router)**, **tRPC**
 | **사용자 동기화** | Clerk **웹훅**(`src/app/api/users/webhook/route.ts`)이 `user.created` 등 이벤트마다 Postgres `users` 행을 insert/update/delete 합니다. Svix로 서명을 검증합니다. |
 | **영상 파이프라인** | Mux에 업로드·인코딩을 맡기고, **Mux 웹훅**으로 `videos` 테이블의 `mux_*` 필드를 갱신합니다. 재생 UI는 `@mux/mux-player-react`를 사용합니다. |
 | **API 계층** | REST 대신 **tRPC**: 서버의 `procedure`가 클라이언트에서 타입까지 그대로 따라옵니다. HTTP 엔드포인트는 사실상 `/api/trpc` 하나에 배치 링크로 묶입니다. |
+| **목록·무한 스크롤** | 여러 화면이 **`useInfiniteQuery` / `useSuspenseInfiniteQuery`** 와 **`nextCursor`** 로 페이지를 이어 받고, `InfiniteScroll`·IntersectionObserver로 자동 로드(또는 Load More)합니다. 뮤테이션 UI는 **낙관적 업데이트 없이** `invalidate`로 동기화합니다. |
 | **데이터 접근** | **Drizzle ORM**으로 스키마를 TypeScript에 두고, `drizzle-zod`로 insert/select용 Zod 스키마를 생성해 입력 검증과 공유합니다. |
 | **보호·남용 방지** | `protectedProcedure` 안에서 Upstash Redis **슬라이딩 윈도우** 레이트 리밋을 적용합니다(`src/lib/ratelimit.ts`). |
 | **이미지 업로드** | UploadThing으로 배너·썸네일 등을 올리고, 완료 시 DB URL/키를 갱신합니다(`src/app/api/uploadthing/core.ts`). |
@@ -44,8 +45,8 @@ YouTube와 유사한 동영상 플랫폼을 **Next.js 15(App Router)**, **tRPC**
 
 ### tRPC + TanStack Query + SuperJSON
 
-- tRPC는 **엔드포인트 문자열 대신** `trpc.videos.xxx.useQuery()`처럼 **함수 호출**처럼 쓰게 해 줍니다. `AppRouter` 타입 하나로 서버·클라이언트가 맞물립니다.
-- TanStack Query는 캐시·리페치·로딩 상태를 담당합니다.
+- tRPC는 **엔드포인트 문자열 대신** `trpc.videos.xxx.useQuery()`처럼 **함수 호출**처럼 쓰게 해 줍니다. `AppRouter` 타입 하나로 서버·클라이언트가 맞물립니다. 목록은 **`useInfiniteQuery` / `useSuspenseInfiniteQuery`** 로 페이지를 이어 붙일 수 있습니다(아래 [인피니티 스크롤](#인피니티-스크롤)).
+- TanStack Query는 캐시·리페치·로딩 상태를 담당합니다. 이 저장소의 뮤테이션은 **낙관적 업데이트 없이** 성공 후 `invalidate`로 맞추는 편입니다([낙관적 업데이트](#낙관적-업데이트)).
 - JSON은 `Date` 같은 타입을 잃어버리므로 **SuperJSON** transformer로 직렬화 규칙을 통일합니다(서버 tRPC 설정과 클라이언트 `httpBatchLink` 모두 동일하게).
 
 ### Drizzle + Neon
@@ -102,7 +103,7 @@ YouTube와 유사한 동영상 플랫폼을 **Next.js 15(App Router)**, **tRPC**
 - **`video_reactions` / `comment_reactions`**: `(userId, videoId)` 또는 `(userId, commentId)` PK로 반응 중복 방지.
 - **`comments`**: `parentId`로 대댓글 트리. 자기 참조 FK와 `onDelete cascade`로 정리됩니다.
 
-**drizzle-zod**: `createInsertSchema(videos)` 같은 헬퍼로 “DB 제약과 맞는 Zod”를 얻어, tRPC `.input()`이나 폼에 재사용합니다. 스키마를 한곳에서 정의하는 **단일 진실 공급원** 패턴입니다.
+**drizzle-zod**: `createInsertSchema(videos)` 같은 헬퍼로 “DB 제약과 맞는 Zod”를 얻어, tRPC `.input()`이나 폼에 재사용합니다. 스키마를 한곳에서 정의하는 **단일 진실 공급원** 패턴입니다. tRPC·폼·UploadThing에서 쓰는 구체적인 규칙은 아래 [Zod로 입력 검증](#zod로-입력-검증)을 보세요.
 
 ---
 
@@ -123,6 +124,41 @@ YouTube와 유사한 동영상 플랫폼을 **Next.js 15(App Router)**, **tRPC**
 ### tRPC 클라이언트의 URL 처리
 
 브라우저에서는 상대 경로 `/api/trpc`, 서버 컴포넌트/SSR에서는 `NEXT_PUBLIC_APP_URL` 기반 절대 URL이 필요합니다(`src/trpc/client.tsx`, `src/modules/videos/constants.ts`).
+
+### Zod로 입력 검증
+
+**Zod**는 JSON·폼·업로드 메타데이터처럼 **런타임에 들어오는 값**을 검사하고, 통과한 뒤의 타입을 TypeScript와 맞춥니다. 이 프로젝트에서는 크게 세 갈래로 씁니다.
+
+1. **DB에서 파생 (`drizzle-zod`)**  
+   `src/db/schema.ts`에서 `createInsertSchema`, `createUpdateSchema`, `createSelectSchema`로 테이블마다 Zod 스키마를 export합니다. 예를 들어 스튜디오 영상 편집 폼은 `videoUpdateSchema`를 그대로 가져다 `react-hook-form`과 연결하고, 댓글 폼은 `commentInsertSchema`에서 서버가 채우는 `userId`만 `.omit({ userId: true })`로 빼서 씁니다. 조회수·반응 등 다른 엔터티용 insert/update 스키마도 같은 파일에 모아 두었습니다.
+
+2. **tRPC `procedure.input(...)`**  
+   각 도메인의 `src/modules/*/server/procedures.ts`에서 **`z.object({ ... })`** 로 호출 인자를 명시합니다. 공통적으로 리소스 id는 `z.string().uuid()`, 목록·무한 스크롤용 **커서**는 `{ id: uuid, updatedAt | viewCount | likedAt | viewedAt: date }` 형태(도메인마다 커서 필드 이름이 조금 다름), 페이지 크기는 `limit: z.number().min(1).max(100)`입니다. 검색·피드처럼 필터가 있으면 `categoryId`, `userId`, `query` 등을 `nullish()`로 받습니다. 썸네일 AI 생성 프로시저는 `prompt: z.string().min(10)`처럼 최소 길이를 둡니다.
+
+3. **UploadThing**  
+   `src/app/api/uploadthing/core.ts`의 `thumbnailUploader`는 클라이언트가 넘기는 메타에 대해 `.input(z.object({ videoId: z.string().uuid() }))`를 붙여, 업로드 전에 UUID 형식을 보장합니다. 배너 업로더는 별도 `.input` 없이 미들웨어에서 인증·권한만 검사합니다.
+
+클라이언트 폼 중 DB 스키마를 쓰지 않는 곳은 로컬 `z.object`를 두고 `@hookform/resolvers/zod`의 **`zodResolver`**로 연결합니다(예: 재생목록 생성 모달의 `name: z.string().min(1)`, 썸네일 프롬프트 모달의 `prompt: z.string().min(10)`).
+
+### 낙관적 업데이트
+
+**현재 코드에는 TanStack Query의 전형적인 낙관적 업데이트(`onMutate`로 캐시를 먼저 바꾸고, 실패 시 `onError`에서 이전 스냅샷으로 되돌리기)가 없습니다.** `onMutate`·`setQueryData`로 즉시 UI를 속이는 패턴을 검색해도 나오지 않습니다.
+
+대신 `useMutation`의 **`onSuccess`** 안에서 `trpc.useUtils()`로 관련 쿼리를 **`invalidate`** 해 서버 응답과 캐시를 다시 맞춥니다. 예: 영상 좋아요/싫어요는 `utils.videos.getOne.invalidate({ id: videoId })`와 `utils.playlists.getLiked.invalidate()`를 호출합니다(`src/modules/videos/ui/components/video-reactions.tsx`). 댓글 작성·삭제, 구독 해지 등도 같은 계열입니다.
+
+학습·확장 시에는 좋아요 수처럼 **즉각 반응이 중요한 UI**에 한해 `onMutate` + 롤백을 추가하는 연습을 할 수 있습니다. 지금 구조에서는 **서버가 단일 진실**에 가깝고 구현이 단순합니다.
+
+### 인피니티 스크롤
+
+긴 목록은 서버가 페이지 단위로 **`{ items, nextCursor }`** 를 돌려주고, 클라이언트는 tRPC가 감싼 TanStack Query **`useInfiniteQuery`** 또는 Suspense용 **`useSuspenseInfiniteQuery`** 로 가져옵니다. 다음 페이지 키는 공통적으로 **`getNextPageParam: (lastPage) => lastPage.nextCursor`** 입니다(`nextCursor`가 없으면 자동으로 더 불러오기가 멈춤). 화면에는 **`pages.flatMap((page) => page.items)`** 로 모든 페이지의 아이템을 한 리스트로 펼칩니다.
+
+**공통 UI**는 `src/components/infinite-scroll.tsx`입니다. `useIntersectionObserver`(`src/hooks/use-intersection-observer.ts`)로 뷰포트 하단에 둔 얇은 sentinel(`ref`)이 들어오면 **`fetchNextPage()`** 를 호출해 자동으로 이어 받습니다(`threshold: 0.5`, `rootMargin: "100px"`). 동시에 **Load More** 버튼을 항상 두어, 자동 스크롤이 동작하지 않는 환경에서도 수동으로 다음 페이지를 요청할 수 있습니다. 더 이상 페이지가 없으면 “끝” 문구를 보여 줍니다.
+
+**`isManual`**: 연관 동영상 `SuggestionsSection`은 `isManual={true}`일 때 자동 intersection 기반 `fetchNextPage`를 하지 않고, 버튼으로만 다음 페이지를 불러오게 할 수 있습니다(같은 컴포넌트 재사용).
+
+**예외**: 대댓글 `CommentReplies`는 `InfiniteScroll`을 쓰지 않고 `useInfiniteQuery`만 쓴 뒤 **“Show more replies”** 버튼으로 `fetchNextPage`를 호출합니다(`src/modules/comments/ui/components/comment-replies.tsx`).
+
+`useInfiniteQuery`/`InfiniteScroll`이 붙은 화면 예시: 홈·트렌딩·구독 피드 영상 그리드, 검색 결과, 영상 페이지 댓글·추천, 채널 영상 목록, 재생목록 목록·영상·좋아요·시청 기록, 스튜디오 영상 목록, 구독 채널 목록, 사이드바 구독 목록, 재생목록에 영상 추가 모달 등.
 
 ---
 
@@ -156,9 +192,11 @@ Clerk·UploadThing 대시보드에서 요구하는 표준 키도 추가로 필�
 2. `schema.ts` → ER 다이어그램을 손으로 그리기  
 3. `trpc/init.ts` → `routers/_app.ts` → `api/trpc` 라우트  
 4. `trpc/client.tsx` + `query-client.ts`  
-5. `modules/videos/server/procedures.ts` → 복잡한 조인·커서 페이지네이션  
-6. `api/videos/webhook` → 이벤트 기반 동기화  
-7. `api/uploadthing/core.ts` → 파일과 DB 정합성  
+5. `modules/videos/server/procedures.ts` → 복잡한 조인·커서 페이지네이션·`nextCursor` 계약  
+6. `db/schema.ts`의 drizzle-zod export + 한 모듈의 `procedures.ts` `.input()` → Zod가 서버 경계를 어떻게 지키는지  
+7. `components/infinite-scroll.tsx` + `home-videos-section.tsx` 등 → `flatMap`으로 페이지 병합·intersection 자동 로드  
+8. `api/videos/webhook` → 이벤트 기반 동기화  
+9. `api/uploadthing/core.ts` → 파일과 DB 정합성  
 
 ---
 
@@ -172,6 +210,7 @@ Clerk·UploadThing 대시보드에서 요구하는 표준 키도 추가로 필�
 |------|-----------|
 | 프레임워크 | Next.js 15 App Router |
 | API·클라이언트 상태 | tRPC 11(RC) + TanStack Query v5 |
+| 입력 검증 | Zod + drizzle-zod(DB 파생 스키마) + `@hookform/resolvers/zod`(폼) |
 | 데이터베이스 | PostgreSQL(Neon) + Drizzle ORM |
 | 인증 | Clerk |
 | 동영상 | Mux(업로드·트랜스코딩·재생) |
@@ -458,6 +497,96 @@ export function makeQueryClient() {
 }
 ```
 
+#### 인피니티 스크롤 컴포넌트
+
+sentinel이 뷰포트에 들어오면 `fetchNextPage`를 호출합니다. `isManual`이면 이 자동 호출을 건너뜁니다. 하단 버튼은 항상 노출되어 수동 로드가 가능합니다.
+
+```12:54:src/components/infinite-scroll.tsx
+export const InfiniteScroll = ({
+  isManual,
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+}: InfiniteScrollProps) => {
+  const { targetRef, isIntersecting } = useIntersectionObserver<HTMLDivElement>(
+    {
+      threshold: 0.5,
+      rootMargin: "100px",
+    }
+  );
+
+  useEffect(() => {
+    if (isIntersecting && hasNextPage && !isFetchingNextPage && !isManual) {
+      fetchNextPage();
+    }
+  }, [
+    isIntersecting,
+    hasNextPage,
+    isFetchingNextPage,
+    isManual,
+    fetchNextPage,
+  ]);
+
+  return (
+    <div className="flex flex-col items-center gap-4 p-4">
+      <div ref={targetRef} className="h-1" />
+      {hasNextPage ? (
+        <Button
+          variant={"secondary"}
+          disabled={!hasNextPage || isFetchingNextPage}
+          onClick={() => fetchNextPage()}
+        >
+          {isFetchingNextPage ? "Loading..." : "Load More"}
+        </Button>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          You have reached the end of the list.
+        </p>
+      )}
+    </div>
+  );
+};
+```
+
+#### 홈 피드에서 `useSuspenseInfiniteQuery` + `flatMap`
+
+첫 페이지는 Suspense로 기다리고, 이후 페이지는 `InfiniteScroll`이 `fetchNextPage`로 붙입니다.
+
+```36:56:src/modules/home/ui/sections/home-videos-section.tsx
+const HomeVideosSectionSuspense = ({ categoryId }: HomeVideosSectionProps) => {
+  const [videos, query] = trpc.videos.getMany.useSuspenseInfiniteQuery({
+    categoryId,
+    limit: DEFAULT_LIMIT,
+  }, {
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  });
+  return <div>
+    <div className="gap-4 gap-y-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 
+    [@media(min-width:1920px)]:grid-cols-5 [@media(min-width:2200px)]:grid-cols-6">
+      {
+        videos.pages.flatMap((page) => page.items).map((video) => (
+          <VideoGridCard key={video.id} data={video} />
+        ))
+      }
+    </div>
+    <InfiniteScroll hasNextPage={query.hasNextPage}
+      isFetchingNextPage={query.isFetchingNextPage}
+      fetchNextPage={query.fetchNextPage} />
+
+  </div>;
+};
+```
+
+#### 낙관적 업데이트 대신 `invalidate` (뮤테이션 예시)
+
+```22:26:src/modules/videos/ui/components/video-reactions.tsx
+    const like = trpc.videoReactions.like.useMutation({
+        onSuccess: () => {
+            utils.videos.getOne.invalidate({ id: videoId });
+            utils.playlists.getLiked.invalidate();
+        },
+```
+
 #### Drizzle + Neon HTTP
 
 `drizzle-orm/neon-http` 단일 인자로 연결 문자열을 넘기면 HTTP 기반 드라이버로 DB에 접속합니다. 서버리스 환경에서 흔한 패턴입니다.
@@ -467,6 +596,35 @@ import { drizzle } from "drizzle-orm/neon-http";
 
 export const db = drizzle(process.env.DATABASE_URL!);
 ```
+
+#### drizzle-zod로 export하는 Zod 스키마
+
+테이블 정의 옆에서 insert/update/select용 Zod를 만들어 폼·서버 로직이 같은 규칙을 공유합니다.
+
+```221:223:src/db/schema.ts
+export const videoInsertSchema = createInsertSchema(videos);
+export const videoUpdateSchema = createUpdateSchema(videos);
+export const videoSelectSchema = createSelectSchema(videos);
+```
+
+```293:295:src/db/schema.ts
+export const commentInsertSchema = createInsertSchema(comments);
+export const commentSelectSchema = createSelectSchema(comments);
+export const commentUpdateSchema = createUpdateSchema(comments);
+```
+
+같은 파일에 `videoView*`, `videoReactions*` 등 다른 엔터티용 스키마도 이어집니다.
+
+#### tRPC·UploadThing 쪽 Zod 패턴 (요약)
+
+| 위치 | 용도 |
+|------|------|
+| `src/modules/*/server/procedures.ts` | `.input(z.object({ ... }))` — UUID id, 커서+`limit`(1–100), `nullish` 필터 등 |
+| `src/modules/studio/ui/sections/form-section.tsx` | `videoUpdateSchema` + `zodResolver` |
+| `src/modules/comments/ui/components/comment-form.tsx` | `commentInsertSchema.omit({ userId: true })` + `zodResolver` |
+| `src/modules/playlists/ui/components/playlist-create-modal.tsx` | 로컬 `name: z.string().min(1)` |
+| `src/modules/studio/ui/components/thumbnail-generate-modal.tsx` | 로컬 `prompt: z.string().min(10)` |
+| `src/app/api/uploadthing/core.ts` | `thumbnailUploader` — `videoId: z.string().uuid()` |
 
 #### 복합 기본키 예시 (`playlist_videos`)
 
@@ -519,9 +677,10 @@ Clerk·UploadThing은 각 대시보드에서 안내하는 표준 환경 변수�
 ### 코드 읽기 순서 (부록 기준)
 
 1. `src/middleware.ts` — 보호 경로
-2. `src/db/schema.ts` — ER를 손으로 그려 볼 것
+2. `src/db/schema.ts` — ER를 손으로 그려 볼 것 + drizzle-zod export
 3. `src/trpc/init.ts` → `routers/_app.ts` → `app/api/trpc/.../route.ts` — API 경계
 4. `src/trpc/client.tsx` + `query-client.ts` — 클라이언트 데이터 계층
-5. `src/modules/videos/server/procedures.ts` — 복잡한 쿼리·Mux·워크플로
-6. `src/app/api/videos/webhook/route.ts` — Mux 이벤트 처리
-7. `src/app/api/uploadthing/core.ts` — 업로드와 DB 정합성
+5. `src/modules/videos/server/procedures.ts` — 복잡한 쿼리·Mux·워크플로·`.input` Zod·커서
+6. `src/components/infinite-scroll.tsx` + `hooks/use-intersection-observer.ts` — 무한 스크롤 트리거
+7. `src/app/api/videos/webhook/route.ts` — Mux 이벤트 처리
+8. `src/app/api/uploadthing/core.ts` — 업로드와 DB 정합성·UploadThing `.input`
