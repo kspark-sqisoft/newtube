@@ -11,9 +11,10 @@ bun run dev:all                   # Next + ngrok webhook 터널 (Mux/Clerk webho
 bun run build                     # 프로덕션 빌드
 bun run lint                      # ESLint (next lint)
 bun run typecheck                 # tsc --noEmit
-bun run test                      # Vitest 단위 테스트
+bun run test                      # Vitest (jsdom + React Testing Library)
 bun run test:watch                # Vitest watch
 bunx vitest run path/to.test.ts   # 단일 테스트 파일 실행
+bunx vitest run -t "test name"    # 이름으로 특정 테스트 실행
 
 bunx drizzle-kit push             # 개발용: 스키마 직접 적용
 bunx drizzle-kit generate         # 프로덕션용: 마이그레이션 SQL 생성
@@ -56,6 +57,9 @@ FK 컬럼을 추가할 때 항상 `index()` 도 함께 정의 (조회 패턴 고
 
 ### 로깅 (`src/lib/logger.ts`)
 ESLint `no-console` 규칙 활성화. `logger.info/warn/error` 사용. `error.tsx` / `global-error.tsx` / `scripts/` / `env.ts` / `logger.ts` 만 console 직접 호출 허용.
+
+### 테스트 (`vitest.config.mts` + `vitest.setup.ts`)
+Next.js 공식 가이드 패턴 (`@vitejs/plugin-react` + `jsdom` + `@testing-library/react`). 파일은 `src/**/*.{test,spec}.{ts,tsx}` 패턴, 보통 `__tests__/` 디렉토리에 둠. `@testing-library/jest-dom/vitest` matcher 가 setup 으로 자동 로드된다. **async Server Components 는 Vitest 미지원** — 그런 페이지는 E2E (Playwright 등) 로 검증.
 
 ### 코멘트
 파일 내 주석은 한국어가 많음 (도메인/스키마 설명 위주). 새 코드의 주석도 한국어로 통일.
