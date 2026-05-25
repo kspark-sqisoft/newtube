@@ -1,4 +1,12 @@
 import { db } from "@/db";
+import { env } from "@/env";
+import {
+  dislikeCountExpr,
+  likeCountExpr,
+  videoReactionStats,
+  videoViewStats,
+  viewCountExpr,
+} from "@/db/aggregates";
 import {
   subscriptions,
   users,
@@ -13,6 +21,7 @@ import {
   protectedProcedure,
 } from "@/trpc/init";
 import { mux } from "@/lib/mux";
+import { logger } from "@/lib/logger";
 import { TRPCError } from "@trpc/server";
 import {
   and,
@@ -62,21 +71,9 @@ export const videosRouter = createTRPCRouter({
         .select({
           ...getTableColumns(videos),
           user: users,
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
@@ -85,6 +82,8 @@ export const videosRouter = createTRPCRouter({
           viewerSubscriptions,
           eq(viewerSubscriptions.userId, users.id),
         )
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"),
@@ -136,49 +135,34 @@ export const videosRouter = createTRPCRouter({
     .query(async ({ input }) => {
       const { cursor, limit } = input;
 
-      const viewCountSubquery = db.$count(
-        videoViews,
-        eq(videoViews.videoId, videos.id),
-      );
-
       const data = await db
         .select({
           ...getTableColumns(videos),
           user: users,
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"),
 
             cursor
               ? or(
-                  lt(viewCountSubquery, cursor.viewCount),
+                  lt(viewCountExpr, cursor.viewCount),
                   and(
-                    eq(viewCountSubquery, cursor.viewCount),
+                    eq(viewCountExpr, cursor.viewCount),
                     lt(videos.id, cursor.id),
                   ),
                 )
               : undefined,
           ),
         )
-        .orderBy(desc(viewCountSubquery), desc(videos.id))
+        .orderBy(desc(viewCountExpr), desc(videos.id))
         //요청한 항목 수보다 항상 한 개 더 조회하여 다음 배치에 추가로 로드할 데이터가 있는지 확인할 수 있게 함
         .limit(limit + 1);
 
@@ -222,24 +206,14 @@ export const videosRouter = createTRPCRouter({
         .select({
           ...getTableColumns(videos), //videos 테이블의 모든 컬럼(id, title, userId, visibility 등)을 그대로 포함합니다
           user: users, //업로더 정보를 위해 users 테이블을 조인하고, 결과에 user라는 이름으로 한 번에 넣습니다 (나중에 .innerJoin(users, ...)로 조인).
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)), //각 비디오별로 videoViews에서 videoId가 해당 비디오인 행 개수를 세서 viewCount로 반환합니다.
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ), //같은 비디오에 대해 videoReactions에서 type === "like"인 행만 세서 likeCount로 반환합니다.
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ), //같은 비디오에 대해 videoReactions에서 type === "dislike"인 행만 세서 dislikeCount로 반환합니다.
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos) //기준 테이블 videos에서 데이터를 가져옵니다.
         .innerJoin(users, eq(videos.userId, users.id)) //videos.userId와 users.id가 같은 행만 남깁니다. 업로더가 없는 비디오는 결과에 안 나옵니다.
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"), //공개 비디오만 조회합니다.
@@ -363,7 +337,7 @@ export const videosRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id: userId } = ctx.user;
       const { workflowRunId } = await workflow.trigger({
-        url: `${process.env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/title`,
+        url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/title`,
         body: { userId, videoId: input.id },
       });
       return workflowRunId;
@@ -374,7 +348,7 @@ export const videosRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id: userId } = ctx.user;
       const { workflowRunId } = await workflow.trigger({
-        url: `${process.env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/description`,
+        url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/description`,
         body: { userId, videoId: input.id },
       });
       return workflowRunId;
@@ -386,7 +360,7 @@ export const videosRouter = createTRPCRouter({
       const { id: userId } = ctx.user;
 
       const { workflowRunId } = await workflow.trigger({
-        url: `${process.env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/thumbnail`,
+        url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/thumbnail`,
         body: { userId, videoId: input.id, prompt: input.prompt },
       });
       return workflowRunId;
@@ -501,7 +475,9 @@ export const videosRouter = createTRPCRouter({
           await mux.video.assets.delete(existingVideo.muxAssetId);
         } catch (error) {
           // Mux asset 삭제 실패해도 로그만 남기고 계속 진행
-          console.error("Failed to delete Mux asset:", error);
+          logger.error("Failed to delete Mux asset", error, {
+            assetId: existingVideo.muxAssetId,
+          });
         }
       }
 
@@ -521,7 +497,9 @@ export const videosRouter = createTRPCRouter({
           await utapi.deleteFiles(filesToDelete);
         } catch (error) {
           // 파일 삭제 실패해도 로그만 남기고 계속 진행
-          console.error("Failed to delete files from UploadThing:", error);
+          logger.error("Failed to delete files from UploadThing", error, {
+            files: filesToDelete,
+          });
         }
       }
 

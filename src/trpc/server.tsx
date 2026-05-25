@@ -13,3 +13,6 @@ export const { trpc, HydrateClient } = createHydrationHelpers<typeof appRouter>(
   caller,
   getQueryClient
 );
+
+// generateMetadata 등 서버 측에서 직접 procedure 를 호출할 때 사용.
+export const createCaller = async () => caller;

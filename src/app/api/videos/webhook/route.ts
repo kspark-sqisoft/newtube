@@ -3,8 +3,10 @@ import { headers } from "next/headers";
 import { UTApi } from "uploadthing/server";
 
 import { db } from "@/db";
+import { env } from "@/env";
 import { videos } from "@/db/schema";
 import { mux } from "@/lib/mux";
+import { logger } from "@/lib/logger";
 import {
   VideoAssetCreatedWebhookEvent,
   VideoAssetDeletedWebhookEvent,
@@ -14,7 +16,7 @@ import {
 } from "@mux/mux-node/resources/webhooks";
 import { NextRequest } from "next/server";
 
-const SIGNING_SECRET = process.env.MUX_WEBHOOK_SECRET!;
+const SIGNING_SECRET = env.MUX_WEBHOOK_SECRET;
 
 type WebHookEvent =
   | VideoAssetCreatedWebhookEvent
@@ -26,7 +28,7 @@ type WebHookEvent =
 export const POST = async (request: NextRequest) => {
   try {
     if (!SIGNING_SECRET) {
-      console.error("MUX_WEBHOOK_SECRET is not set");
+      logger.error("MUX_WEBHOOK_SECRET is not set");
       return new Response("MUX_WEBHOOK_SECRET is not set", { status: 500 });
     }
 
@@ -34,7 +36,7 @@ export const POST = async (request: NextRequest) => {
     const muxSignature = headersPayload.get("mux-signature");
 
     if (!muxSignature) {
-      console.error("Mux signature is not set");
+      logger.warn("Missing mux-signature header");
       return new Response("Mux signature is not set", { status: 400 });
     }
 
@@ -49,7 +51,7 @@ export const POST = async (request: NextRequest) => {
       SIGNING_SECRET
     );
 
-    console.log("Webhook received:", payload.type);
+    logger.info("Mux webhook received", { type: payload.type });
 
     switch (payload.type as WebHookEvent["type"]) {
       case "video.asset.created": {
@@ -66,7 +68,7 @@ export const POST = async (request: NextRequest) => {
           })
           .where(eq(videos.muxUploadId, data.upload_id));
 
-        console.log("✅ Video asset created:", data.id);
+        logger.info("Video asset created", { assetId: data.id });
         break;
       }
 
@@ -110,7 +112,7 @@ export const POST = async (request: NextRequest) => {
             duration
           })
           .where(eq(videos.muxUploadId, data.upload_id));
-          console.log("✅ Video asset ready:", data.id);
+          logger.info("Video asset ready", { assetId: data.id });
         break;
       }
 
@@ -127,7 +129,10 @@ export const POST = async (request: NextRequest) => {
           })
           .where(eq(videos.muxUploadId, data.upload_id));
 
-        console.error("❌ Video asset errored:", data.id, data.errors);
+        logger.error("Video asset errored", undefined, {
+          assetId: data.id,
+          errors: data.errors,
+        });
         break;
       }
 
@@ -137,7 +142,7 @@ export const POST = async (request: NextRequest) => {
           return new Response("Upload ID is not set", { status: 400 });
         }
         await db.delete(videos).where(eq(videos.muxUploadId, data.upload_id));
-        console.log("🗑️  Video deleted:", data.upload_id);
+        logger.info("Video deleted", { uploadId: data.upload_id });
         break;
       }
 
@@ -146,7 +151,7 @@ export const POST = async (request: NextRequest) => {
           asset_id: string;
         };
 
-        console.log("📝 Video asset track ready:", data);
+        logger.info("Video asset track ready", { data });
 
         const assetId = data.asset_id;
         const trackId = data.id;
@@ -164,25 +169,21 @@ export const POST = async (request: NextRequest) => {
           })
           .where(eq(videos.muxAssetId, assetId));
 
-        console.log("🎵  Track processed", {
-          assetId,
-          trackId,
-          status,
-        });
+        logger.info("Track processed", { assetId, trackId, status });
 
         break;
       }
 
 
       default: {
-        console.log("ℹ️  Unhandled webhook type", payload.type);
+        logger.info("Unhandled mux webhook type", { type: payload.type });
         break;
       }
     }
 
     return new Response("Webhook processed", { status: 200 });
   } catch (error) {
-    console.error("Unhandled webhook error", error);
+    logger.error("Unhandled mux webhook error", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 };

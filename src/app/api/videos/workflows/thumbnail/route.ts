@@ -1,19 +1,20 @@
 import { db } from "@/db";
 import { videos } from "@/db/schema";
+import { env } from "@/env";
 import {serve} from "@upstash/workflow/nextjs";
 import { and, eq } from "drizzle-orm";
 import { UTApi } from "uploadthing/server";
+import { z } from "zod";
 
-interface InputType{
-    userId: string;
-    videoId: string;
-    prompt: string;
-};
+const inputSchema = z.object({
+    userId: z.string().uuid(),
+    videoId: z.string().uuid(),
+    prompt: z.string().min(10),
+});
 
 export const {POST} = serve(
     async (context) => {
-        const input = context.requestPayload as InputType;
-        const {userId, videoId, prompt} = input;
+        const {userId, videoId, prompt} = inputSchema.parse(context.requestPayload);
         const utapi = new UTApi();
 
         const video = await context.run("get-video", async () => {
@@ -41,7 +42,7 @@ export const {POST} = serve(
                 size:"1792x1024",
             },
             headers:{
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
             },
         });
 

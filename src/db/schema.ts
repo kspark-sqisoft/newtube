@@ -6,6 +6,7 @@ import {
   uuid,
   timestamp,
   uniqueIndex,
+  index,
   integer,
   pgEnum,
   primaryKey,
@@ -42,6 +43,8 @@ export const playlistVideos = pgTable(
       name: "playlist_videos_pk",
       columns: [t.playlistId, t.videoId],
     }),
+    // videoId 단독 조회용 (어느 플레이리스트에 들어있는지)
+    index("playlist_videos_video_id_idx").on(t.videoId),
   ],
 );
 
@@ -60,18 +63,25 @@ export const playlistVideosRelations = relations(playlistVideos, ({ one }) => ({
 // 재생목록
 // playlists와 users 관계는 1:N 관계입니다. 한 사용자가 여러 재생목록을 만들 수 있습니다.
 // 한 플레이리스트(playlists) → 한 사용자(users)에게만 속함
-export const playlists = pgTable("playlists", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  userId: uuid("user_id") //재생목록을 만든 사람
-    .references(() => users.id, {
-      onDelete: "cascade",
-    })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const playlists = pgTable(
+  "playlists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    userId: uuid("user_id") //재생목록을 만든 사람
+      .references(() => users.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // 사용자별 플레이리스트 목록 조회 + 커서 페이지네이션용
+    index("playlists_user_id_updated_at_idx").on(t.userId, t.updatedAt),
+  ],
+);
 
 // playlists → user, playlistVideos[]
 export const playlistRelations = relations(playlists, ({ one, many }) => ({
@@ -140,6 +150,8 @@ export const subscriptions = pgTable(
       name: "subscriptions_pk",
       columns: [t.viewerId, t.creatorId],
     }),
+    // creatorId 단독 조회용 (이 크리에이터를 구독한 사람들 조회)
+    index("subscriptions_creator_id_idx").on(t.creatorId),
   ],
 );
 
@@ -187,36 +199,47 @@ export const videoVisibility = pgEnum("video_visibility", [
 // 영상 (Mux 스트리밍 메타 포함)
 // 한 카테고리 → 여러 비디오 (1:N)
 // 한 사용자(users) → 여러 비디오(videos) (1:N) 업로드 가능
-export const videos = pgTable("videos", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  title: text("title").notNull(),
-  description: text("description"),
+export const videos = pgTable(
+  "videos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    description: text("description"),
 
-  muxStatus: text("mux_status"),
-  muxAssetId: text("mux_asset_id").unique(),
-  muxUploadId: text("mux_upload_id").unique(),
-  muxPlaybackId: text("mux_playback_id").unique(),
-  muxTrackId: text("mux_track_id").unique(),
-  muxTrackStatus: text("mux_track_status"),
-  thumbnailUrl: text("thumbnail_url"),
-  thumbnailKey: text("thumbnail_key"),
-  previewUrl: text("preview_url"),
-  previewKey: text("preview_key"),
-  duration: integer("duration").default(0).notNull(),
-  visibility: videoVisibility("visibility").default("private").notNull(),
-  userId: uuid("user_id") //업로더
-    .references(() => users.id, {
-      onDelete: "cascade",
-    })
-    .notNull(),
+    muxStatus: text("mux_status"),
+    muxAssetId: text("mux_asset_id").unique(),
+    muxUploadId: text("mux_upload_id").unique(),
+    muxPlaybackId: text("mux_playback_id").unique(),
+    muxTrackId: text("mux_track_id").unique(),
+    muxTrackStatus: text("mux_track_status"),
+    thumbnailUrl: text("thumbnail_url"),
+    thumbnailKey: text("thumbnail_key"),
+    previewUrl: text("preview_url"),
+    previewKey: text("preview_key"),
+    duration: integer("duration").default(0).notNull(),
+    visibility: videoVisibility("visibility").default("private").notNull(),
+    userId: uuid("user_id") //업로더
+      .references(() => users.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
 
-  categoryId: uuid("category_id").references(() => categories.id, {
-    onDelete: "set null",
-  }), //카테고리
+    categoryId: uuid("category_id").references(() => categories.id, {
+      onDelete: "set null",
+    }), //카테고리
 
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // 사용자별 비디오 목록 조회 + 커서 페이지네이션 (updated_at DESC, id DESC)
+    index("videos_user_id_updated_at_idx").on(t.userId, t.updatedAt),
+    // 카테고리별 공개 비디오 조회
+    index("videos_category_id_idx").on(t.categoryId),
+    // 공개 비디오 목록 + 페이지네이션 (visibility 필터 + 정렬)
+    index("videos_visibility_updated_at_idx").on(t.visibility, t.updatedAt),
+  ],
+);
 
 export const videoInsertSchema = createInsertSchema(videos);
 export const videoUpdateSchema = createUpdateSchema(videos);
@@ -265,6 +288,12 @@ export const comments = pgTable(
         foreignColumns: [t.id],
         name: "comments_parent_id_fkey",
       }).onDelete("cascade"),
+      // 영상별 댓글 목록 조회 + 정렬
+      index("comments_video_id_created_at_idx").on(t.videoId, t.createdAt),
+      // 대댓글(replies) 조회
+      index("comments_parent_id_idx").on(t.parentId),
+      // 사용자별 댓글 조회
+      index("comments_user_id_idx").on(t.userId),
     ];
   },
 );
@@ -316,6 +345,8 @@ export const commentReactions = pgTable(
       name: "comment_reactions_pk",
       columns: [t.userId, t.commentId],
     }),
+    // commentId 단독 조회 (댓글별 반응 집계)
+    index("comment_reactions_comment_id_idx").on(t.commentId),
   ],
 );
 
@@ -357,6 +388,8 @@ export const videoViews = pgTable(
       name: "video_views_pk",
       columns: [t.userId, t.videoId],
     }),
+    // videoId 단독 조회 (영상별 조회수 집계)
+    index("video_views_video_id_idx").on(t.videoId),
   ],
 );
 
@@ -400,6 +433,8 @@ export const videoReactions = pgTable(
       name: "video_reactions_pk",
       columns: [t.userId, t.videoId],
     }),
+    // videoId + type 조회 (영상별 좋아요/싫어요 집계)
+    index("video_reactions_video_id_type_idx").on(t.videoId, t.type),
   ],
 );
 

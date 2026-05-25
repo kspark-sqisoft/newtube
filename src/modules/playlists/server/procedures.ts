@@ -1,5 +1,12 @@
 import { db } from "@/db";
 import {
+  dislikeCountExpr,
+  likeCountExpr,
+  videoReactionStats,
+  videoViewStats,
+  viewCountExpr,
+} from "@/db/aggregates";
+import {
   playlists,
   playlistVideos,
   users,
@@ -109,25 +116,15 @@ export const playlistsRouter = createTRPCRouter({
         .select({
           ...getTableColumns(videos),
           user: users,
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
         .innerJoin(videosFromPlaylist, eq(videos.id, videosFromPlaylist.videoId))
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"),
@@ -470,25 +467,15 @@ export const playlistsRouter = createTRPCRouter({
           ...getTableColumns(videos),
           user: users,
           likedAt: viewerVideoReactions.likedAt,
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
         .innerJoin(viewerVideoReactions, eq(videos.id, viewerVideoReactions.videoId))
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"),
@@ -556,25 +543,15 @@ export const playlistsRouter = createTRPCRouter({
           ...getTableColumns(videos),
           user: users,
           viewedAt: viewerVideoViews.viewedAt,
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
         .innerJoin(viewerVideoViews, eq(videos.id, viewerVideoViews.videoId))
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
         .where(
           and(
             eq(videos.visibility, "public"),

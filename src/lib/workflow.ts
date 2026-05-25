@@ -1,3 +1,5 @@
-import {Client} from "@upstash/workflow";
+import { Client } from "@upstash/workflow";
 
-export const workflow = new Client({token: process.env.QSTASH_TOKEN!});
+import { env } from "@/env";
+
+export const workflow = new Client({ token: env.QSTASH_TOKEN });

@@ -1,12 +1,14 @@
 import { db } from "@/db";
 import { videos } from "@/db/schema";
+import { env } from "@/env";
 import {serve} from "@upstash/workflow/nextjs";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 
-interface InputType{
-    userId: string;
-    videoId: string;
-};
+const inputSchema = z.object({
+    userId: z.string().uuid(),
+    videoId: z.string().uuid(),
+});
 
 
 const DESCRIPTION_SYSTEM_PROMPT = `Your task is to summarize the transcript of a video. Please follow these guidelines:
@@ -18,8 +20,7 @@ const DESCRIPTION_SYSTEM_PROMPT = `Your task is to summarize the transcript of a
 
 export const {POST} = serve(
     async (context) => {
-        const input = context.requestPayload as InputType;
-        const {userId, videoId} = input;
+        const {userId, videoId} = inputSchema.parse(context.requestPayload);
 
         const video = await context.run("get-video", async () => {
             const [existingVideo] = await db.select().from(videos).where(and(
@@ -37,8 +38,11 @@ export const {POST} = serve(
         const transcript = await context.run("get-transcript", async() => {
             const trackUrl = `https://stream.mux.com/${video.muxPlaybackId}/text/${video.muxTrackId}.txt`;
             const response = await fetch(trackUrl);
-            const text = response.text();
-            if(!text) {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch transcript: ${response.status}`);
+            }
+            const text = await response.text();
+            if (!text) {
                 throw new Error("No transcript found");
             }
             return text;
@@ -47,7 +51,7 @@ export const {POST} = serve(
         const {body} = await context.api.openai.call(
             "generate-description",
             {
-                token:process.env.OPENAI_API_KEY!,
+                token: env.OPENAI_API_KEY,
                 operation:"chat.completions.create",
                 body:{
                     model:"gpt-4o",

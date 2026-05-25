@@ -1,8 +1,6 @@
 import { CategoriesSection } from "../sections/categories-section";
 import HomeVideosSection from "../sections/home-videos-section";
 
-export const dynamic = "force-dynamic";
-
 interface HomeViewProps {
   categoryId?: string;
 }

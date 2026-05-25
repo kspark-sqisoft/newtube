@@ -1,21 +1,15 @@
 import { db } from "@/db";
+import { env } from "@/env";
 import { users } from "@/db/schema";
+import { logger } from "@/lib/logger";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { Webhook } from "svix";
 
 export async function POST(req: Request) {
-  const CLERK_SIGNING_SECRET = process.env.CLERK_SIGNING_SECRET;
-
-  if (!CLERK_SIGNING_SECRET) {
-    throw new Error(
-      "Error: Please add CLERK_SIGNING_SECRET from Clerk Dashboard to .env or .env"
-    );
-  }
-
   // Create new Svix instance with secret
-  const wh = new Webhook(CLERK_SIGNING_SECRET);
+  const wh = new Webhook(env.CLERK_SIGNING_SECRET);
 
   // Get headers
   const headerPayload = await headers();
@@ -44,7 +38,7 @@ export async function POST(req: Request) {
       "svix-signature": svix_signature,
     }) as WebhookEvent;
   } catch (err) {
-    console.error("Error: Could not verify webhook:", err);
+    logger.error("Clerk webhook verification failed", err);
     return new Response("Error: Verification error", {
       status: 400,
     });

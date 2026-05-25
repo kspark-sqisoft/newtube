@@ -9,10 +9,21 @@ import { ratelimit } from "@/lib/ratelimit";
 
 //tRPC 서버 초기화
 
-// Clerk userId 등을 넣고, cache()로 요청당 한 번만 생성
+// Clerk userId + DB user를 같이 캐시. cache()는 요청당 한 번만 실행.
 export const createTRPCContext = cache(async () => {
-  const { userId } = await auth();
-  return { clerkUserId: userId };
+  const { userId: clerkUserId } = await auth();
+
+  if (!clerkUserId) {
+    return { clerkUserId: null, user: null };
+  }
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkId, clerkUserId))
+    .limit(1);
+
+  return { clerkUserId, user: user ?? null };
 });
 
 export type Context = Awaited<ReturnType<typeof createTRPCContext>>;
@@ -42,22 +53,16 @@ export const protectedProcedure = t.procedure.use(
       });
     }
 
-    // Obtener los datos del usuario desde la base de datos
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.clerkId, ctx.clerkUserId))
-      .limit(1);
-
-    if (!user) {
+    if (!ctx.user) {
+      // Clerk 인증은 되었으나 DB에 user 행 없음 (webhook 누락 등)
       throw new TRPCError({
         code: "UNAUTHORIZED",
-        message: "Not user found in database",
+        message: "User not found in database",
       });
     }
-    // Comprobar si el usuario ha superado el límite de peticiones
 
-    const { success } = await ratelimit.limit(user.id);
+    // 요청 횟수 제한 검사
+    const { success } = await ratelimit.limit(ctx.user.id);
     if (!success) {
       throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
     }
@@ -65,7 +70,7 @@ export const protectedProcedure = t.procedure.use(
     return opts.next({
       ctx: {
         ...ctx,
-        user,
+        user: ctx.user,
       },
     });
   },
