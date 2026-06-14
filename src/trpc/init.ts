@@ -26,6 +26,12 @@ export const createTRPCContext = cache(async () => {
   return { clerkUserId, user: user ?? null };
 });
 
+// 공개 데이터 prefetch용 — auth() 호출 없이 static 렌더링 가능
+export const createPublicTRPCContext = cache(async () => ({
+  clerkUserId: null,
+  user: null,
+}));
+
 export type Context = Awaited<ReturnType<typeof createTRPCContext>>;
 
 // tRPC 인스턴스 생성
@@ -61,10 +67,12 @@ export const protectedProcedure = t.procedure.use(
       });
     }
 
-    // 요청 횟수 제한 검사
-    const { success } = await ratelimit.limit(ctx.user.id);
-    if (!success) {
-      throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
+    // mutation만 rate limit (query 스크롤/프리페치와 구분)
+    if (opts.type === "mutation") {
+      const { success } = await ratelimit.limit(ctx.user.id);
+      if (!success) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
+      }
     }
 
     return opts.next({

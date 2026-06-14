@@ -8,6 +8,7 @@ import {
   viewCountExpr,
 } from "@/db/aggregates";
 import { users, videos } from "@/db/schema";
+import { trimSearchQuery } from "@/lib/search-query";
 import { baseProcedure, createTRPCRouter } from "@/trpc/init";
 import { and, desc, eq, getTableColumns, ilike, lt, or } from "drizzle-orm";
 
@@ -28,6 +29,7 @@ export const searchRouter = createTRPCRouter({
     )
     .query(async ({ input }) => {
       const { cursor, limit, query, categoryId } = input;
+      const trimmedQuery = trimSearchQuery(query);
 
       const data = await db
         .select({
@@ -44,7 +46,9 @@ export const searchRouter = createTRPCRouter({
         .where(
           and(
             eq(videos.visibility, "public"),
-            ilike(videos.title, `%${query}%`),
+            trimmedQuery
+              ? ilike(videos.title, `%${trimmedQuery}%`)
+              : undefined,
             categoryId ? eq(videos.categoryId, categoryId) : undefined,
             cursor
               ? or(

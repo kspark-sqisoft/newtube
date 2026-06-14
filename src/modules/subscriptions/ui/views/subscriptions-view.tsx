@@ -1,4 +1,4 @@
-import { SubscriptionsSection } from "../secions/subscriptions-section";
+import { SubscriptionsSection } from "../sections/subscriptions-section";
 
 export const SubscriptionsView = () => {
     return (

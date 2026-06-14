@@ -1,40 +1,21 @@
 import { db } from "@/db";
 import {
-  subscriptions,
-  users,
-  videos,
-} from "@/db/schema";
-import {
-  baseProcedure,
-  createTRPCRouter,
-} from "@/trpc/init";
-
+  subscriberCountExpr,
+  subscriberStats,
+  videoCountExpr,
+  userVideoStats,
+} from "@/db/aggregates";
+import { subscriptions, users } from "@/db/schema";
+import { baseProcedure, createTRPCRouter } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import {
-  eq,
-  getTableColumns,
-  inArray,
-  isNotNull,
-} from "drizzle-orm";
+import { eq, getTableColumns, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
-
 export const usersRouter = createTRPCRouter({
-
   getOne: baseProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
-      const { clerkUserId } = ctx;
-      let userId;
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(inArray(users.clerkId, clerkUserId ? [clerkUserId] : []));
-
-      if (user) {
-        userId = user.id;
-      }
-
+      const userId = ctx.user?.id;
 
       const viewerSubscriptions = db.$with("viewer_subscriptions").as(
         db
@@ -44,16 +25,18 @@ export const usersRouter = createTRPCRouter({
       );
 
       const [existingUser] = await db
-        .with( viewerSubscriptions)
+        .with(viewerSubscriptions)
         .select({
           ...getTableColumns(users),
           viewerSubscribed: isNotNull(viewerSubscriptions.viewerId).mapWith(
             Boolean,
           ),
-          videoCount: db.$count(videos, eq(videos.userId, users.id)),
-          subscriberCount: db.$count(subscriptions, eq(subscriptions.creatorId, users.id)),
+          videoCount: videoCountExpr,
+          subscriberCount: subscriberCountExpr,
         })
         .from(users)
+        .leftJoin(userVideoStats, eq(userVideoStats.userId, users.id))
+        .leftJoin(subscriberStats, eq(subscriberStats.creatorId, users.id))
         .leftJoin(
           viewerSubscriptions,
           eq(viewerSubscriptions.creatorId, users.id),
@@ -64,6 +47,4 @@ export const usersRouter = createTRPCRouter({
 
       return existingUser;
     }),
-
- 
 });

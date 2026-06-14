@@ -1,29 +1,29 @@
 import { DEFAULT_LIMIT } from "@/constants";
 import { SearchView } from "@/modules/search/ui/views/search-view";
-import { HydrateClient, trpc } from "@/trpc/server";
-
-export const dynamic = "force-dynamic";
+import { HydrateClient, publicTrpc } from "@/trpc/server";
 
 interface PageProps {
-    searchParams: Promise<{
-        query: string | undefined;
-        categoryId?: string | undefined;
-    }>;
+  searchParams: Promise<{
+    query: string | undefined;
+    categoryId?: string | undefined;
+  }>;
 }
 
 const Page = async ({ searchParams }: PageProps) => {
-    const { query, categoryId } = await searchParams;
+  const { query, categoryId } = await searchParams;
 
-    void trpc.categories.getMany.prefetch();
-    void trpc.search.getMany.prefetchInfinite({
-        query,
-        categoryId,
-        limit: DEFAULT_LIMIT,
-    });
+  void publicTrpc.categories.getMany.prefetch();
+  void publicTrpc.search.getMany.prefetchInfinite({
+    query,
+    categoryId,
+    limit: DEFAULT_LIMIT,
+  });
 
-    return (<HydrateClient>
-        <SearchView query={query} categoryId={categoryId} />
-    </HydrateClient>);
+  return (
+    <HydrateClient>
+      <SearchView query={query} categoryId={categoryId} />
+    </HydrateClient>
+  );
 };
 
 export default Page;

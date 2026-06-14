@@ -2,6 +2,8 @@ import { db } from "@/db";
 import {
   dislikeCountExpr,
   likeCountExpr,
+  playlistVideoCountExpr,
+  playlistVideoStats,
   videoReactionStats,
   videoViewStats,
   viewCountExpr,
@@ -288,7 +290,7 @@ export const playlistsRouter = createTRPCRouter({
       const data = await db
         .select({
           ...getTableColumns(playlists),
-          videoCount: db.$count(playlistVideos, eq(playlistVideos.playlistId, playlists.id)),
+          videoCount: playlistVideoCountExpr,
           user:users,
           containsVideo : videoId
           ? sql<boolean>`(
@@ -301,6 +303,7 @@ export const playlistsRouter = createTRPCRouter({
         })
         .from(playlists)
         .innerJoin(users, eq(playlists.userId, users.id))
+        .leftJoin(playlistVideoStats, eq(playlistVideoStats.playlistId, playlists.id))
         .where(
           and(
             eq(playlists.userId, userId),
@@ -358,7 +361,7 @@ export const playlistsRouter = createTRPCRouter({
       const data = await db
         .select({
           ...getTableColumns(playlists),
-          videoCount: db.$count(playlistVideos, eq(playlistVideos.playlistId, playlists.id)),
+          videoCount: playlistVideoCountExpr,
           user:users,
           thumbnailUrl: sql<string | null>`(
             SELECT v.thumbnail_url
@@ -371,6 +374,7 @@ export const playlistsRouter = createTRPCRouter({
         })
         .from(playlists)
         .innerJoin(users, eq(playlists.userId, users.id))
+        .leftJoin(playlistVideoStats, eq(playlistVideoStats.playlistId, playlists.id))
         .where(
           and(
             eq(playlists.userId, userId),

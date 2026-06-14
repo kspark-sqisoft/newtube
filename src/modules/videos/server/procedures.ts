@@ -3,6 +3,8 @@ import { env } from "@/env";
 import {
   dislikeCountExpr,
   likeCountExpr,
+  subscriberCountExpr,
+  subscriberStats,
   videoReactionStats,
   videoViewStats,
   viewCountExpr,
@@ -13,7 +15,6 @@ import {
   videoReactions,
   videos,
   videoUpdateSchema,
-  videoViews,
 } from "@/db/schema";
 import {
   baseProcedure,
@@ -254,16 +255,7 @@ export const videosRouter = createTRPCRouter({
   getOne: baseProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input, ctx }) => {
-      const { clerkUserId } = ctx;
-      let userId;
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(inArray(users.clerkId, clerkUserId ? [clerkUserId] : []));
-
-      if (user) {
-        userId = user.id;
-      }
+      const userId = ctx.user?.id;
 
       const viewerReactions = db.$with("viewer_reactions").as(
         db
@@ -288,44 +280,35 @@ export const videosRouter = createTRPCRouter({
           ...getTableColumns(videos),
           user: {
             ...getTableColumns(users),
-            subscriberCount: db.$count(
-              subscriptions,
-              eq(subscriptions.creatorId, users.id),
-            ),
+            subscriberCount: subscriberCountExpr,
             viewerSubscribed: isNotNull(viewerSubscriptions.viewerId).mapWith(
               Boolean,
             ),
           },
-          viewCount: db.$count(videoViews, eq(videoViews.videoId, videos.id)),
-          likeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "like"),
-            ),
-          ),
-          dislikeCount: db.$count(
-            videoReactions,
-            and(
-              eq(videoReactions.videoId, videos.id),
-              eq(videoReactions.type, "dislike"),
-            ),
-          ),
+          viewCount: viewCountExpr,
+          likeCount: likeCountExpr,
+          dislikeCount: dislikeCountExpr,
           viewerReaction: viewerReactions.type,
         })
         .from(videos)
         .innerJoin(users, eq(videos.userId, users.id))
+        .leftJoin(videoViewStats, eq(videoViewStats.videoId, videos.id))
+        .leftJoin(videoReactionStats, eq(videoReactionStats.videoId, videos.id))
+        .leftJoin(subscriberStats, eq(subscriberStats.creatorId, users.id))
         .leftJoin(viewerReactions, eq(viewerReactions.videoId, videos.id))
         .leftJoin(
           viewerSubscriptions,
           eq(viewerSubscriptions.creatorId, users.id),
         )
-        .where(eq(videos.id, input.id));
-      // .groupBy(
-      //   videos.id,
-      //   users.id,
-      //   viewerReactions.type,
-      // )
+        .where(
+          and(
+            eq(videos.id, input.id),
+            or(
+              eq(videos.visibility, "public"),
+              userId ? eq(videos.userId, userId) : undefined,
+            ),
+          ),
+        );
 
       if (!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
 
@@ -336,6 +319,13 @@ export const videosRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { id: userId } = ctx.user;
+
+      const [existingVideo] = await db
+        .select({ id: videos.id })
+        .from(videos)
+        .where(and(eq(videos.id, input.id), eq(videos.userId, userId)));
+      if (!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
+
       const { workflowRunId } = await workflow.trigger({
         url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/title`,
         body: { userId, videoId: input.id },
@@ -347,6 +337,13 @@ export const videosRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { id: userId } = ctx.user;
+
+      const [existingVideo] = await db
+        .select({ id: videos.id })
+        .from(videos)
+        .where(and(eq(videos.id, input.id), eq(videos.userId, userId)));
+      if (!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
+
       const { workflowRunId } = await workflow.trigger({
         url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/description`,
         body: { userId, videoId: input.id },
@@ -358,6 +355,12 @@ export const videosRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid(), prompt: z.string().min(10) }))
     .mutation(async ({ ctx, input }) => {
       const { id: userId } = ctx.user;
+
+      const [existingVideo] = await db
+        .select({ id: videos.id })
+        .from(videos)
+        .where(and(eq(videos.id, input.id), eq(videos.userId, userId)));
+      if (!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
 
       const { workflowRunId } = await workflow.trigger({
         url: `${env.UPSTASH_WORKFLOW_URL}/api/videos/workflows/thumbnail`,
