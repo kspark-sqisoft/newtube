@@ -5,13 +5,21 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, videos } from "@/db/schema";
+import { logger } from "@/lib/logger";
+
 const f = createUploadthing();
 
-
-
+// 기존 키를 background 로 정리. 새 파일 저장이 완료된 뒤에만 호출해서
+// 업로드 실패 시 기존 자산이 영구히 사라지는 사고를 막는다.
+const deleteOldKey = (key: string | null | undefined) => {
+  if (!key) return;
+  const utapi = new UTApi();
+  utapi.deleteFiles(key).catch((error) => {
+    logger.error("Failed to delete previous upload key", error, { key });
+  });
+};
 
 export const ourFileRouter = {
-
   bannerUploader: f({
     image: {
       maxFileSize: "4MB",
@@ -19,25 +27,20 @@ export const ourFileRouter = {
     },
   })
     .middleware(async () => {
-      
-      const {userId:clerkUserId} = await auth();
+      const { userId: clerkUserId } = await auth();
 
       if (!clerkUserId) throw new UploadThingError("Unauthorized");
 
-      const [existingUser] = await db.select().from(users).where(eq(users.clerkId, clerkUserId));
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.clerkId, clerkUserId));
       if (!existingUser) throw new UploadThingError("Unauthorized");
 
-     
-      if(existingUser.bannerKey) {
-        const utapi = new UTApi();
-        await utapi.deleteFiles(existingUser.bannerKey);
-        await db.update(users).set({bannerKey:null, bannerUrl:null})
-        .where(
-          eq(users.id, existingUser.id)
-        );
-      }
-
-      return { userId:existingUser.id};
+      return {
+        userId: existingUser.id,
+        previousKey: existingUser.bannerKey ?? null,
+      };
     })
     .onUploadComplete(async ({ metadata, file }) => {
       await db
@@ -46,48 +49,48 @@ export const ourFileRouter = {
           bannerUrl: file.url,
           bannerKey: file.key,
         })
-        .where(
-          eq(users.id, metadata.userId)
-        );
+        .where(eq(users.id, metadata.userId));
 
-      
+      // 새 키가 저장된 이후에만 옛 키 정리
+      deleteOldKey(metadata.previousKey);
+
       return { uploadedBy: metadata.userId };
     }),
-  
+
   thumbnailUploader: f({
     image: {
       maxFileSize: "4MB",
       maxFileCount: 1,
     },
   })
-    .input(z.object({
-      videoId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        videoId: z.string().uuid(),
+      }),
+    )
     .middleware(async ({ input }) => {
-      
-      const {userId:clerkUserId} = await auth();
+      const { userId: clerkUserId } = await auth();
 
       if (!clerkUserId) throw new UploadThingError("Unauthorized");
 
-      const [user] = await db.select().from(users).where(eq(users.clerkId, clerkUserId));
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.clerkId, clerkUserId));
       if (!user) throw new UploadThingError("Unauthorized");
 
-      const [existingVideo] = await db.select({thumbnailKey:videos.thumbnailKey}).from(videos).where(and(
-        eq(videos.id, input.videoId),
-        eq(videos.userId, user.id)
-      ))
+      const [existingVideo] = await db
+        .select({ thumbnailKey: videos.thumbnailKey })
+        .from(videos)
+        .where(and(eq(videos.id, input.videoId), eq(videos.userId, user.id)));
 
-      if(!existingVideo) throw new UploadThingError("Video not found");
-      if(existingVideo.thumbnailKey) {
-        const utapi = new UTApi();
-        await utapi.deleteFiles(existingVideo.thumbnailKey);
-        await db.update(videos).set({thumbnailKey:null, thumbnailUrl:null}).where(and(
-          eq(videos.id, input.videoId),
-          eq(videos.userId, user.id)
-        ));
-      }
+      if (!existingVideo) throw new UploadThingError("Video not found");
 
-      return { user, ...input};
+      return {
+        user,
+        videoId: input.videoId,
+        previousKey: existingVideo.thumbnailKey ?? null,
+      };
     })
     .onUploadComplete(async ({ metadata, file }) => {
       await db
@@ -96,14 +99,15 @@ export const ourFileRouter = {
           thumbnailUrl: file.url,
           thumbnailKey: file.key,
         })
-        .where(and(
-          eq(videos.id, metadata.videoId),
-          eq(videos.userId, metadata.user.id)
-        )
-          
+        .where(
+          and(
+            eq(videos.id, metadata.videoId),
+            eq(videos.userId, metadata.user.id),
+          ),
         );
 
-      
+      deleteOldKey(metadata.previousKey);
+
       return { uploadedBy: metadata.user.id };
     }),
 } satisfies FileRouter;

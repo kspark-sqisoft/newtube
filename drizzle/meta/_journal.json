@@ -15,6 +15,13 @@
       "when": 1779692537043,
       "tag": "0001_large_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781400645812,
+      "tag": "0002_long_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }

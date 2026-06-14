@@ -13,8 +13,9 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
-      // src/lib/logger.ts 와 env.ts 외에는 console 직접 호출 금지
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      // src/lib/logger.ts 와 env.ts 외에는 console 직접 호출 금지.
+      // CI 에서 빨간불이 떠야 logger 미사용을 막을 수 있으므로 error 로 격상.
+      "no-console": ["error", { allow: ["warn", "error"] }],
     },
   },
   {

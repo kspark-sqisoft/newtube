@@ -23,7 +23,8 @@ const serverEnvSchema = z.object({
 
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  // Clerk SDK 가 런타임에 요구하므로 필수. 빌드/prerender 실패를 부팅 시점에서 검출.
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
 });
 
 const isServer = typeof window === "undefined";

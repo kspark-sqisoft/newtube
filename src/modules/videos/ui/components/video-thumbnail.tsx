@@ -1,4 +1,4 @@
-import { formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import Image from "next/image";
 import { THUMBNAIL_FALLBACK } from "../../constants";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,15 +27,21 @@ export const VideoThumbnail = ({ imageUrl, previewUrl, title, duration }: VideoT
                     src={imageUrl || THUMBNAIL_FALLBACK}
                     alt={title}
                     fill
-                    className="h-full w-full object-cover group-hover:opacity-0"
+                    className={cn(
+                        "h-full w-full object-cover",
+                        previewUrl && "group-hover:opacity-0",
+                    )}
                 />
-                <Image
-                    unoptimized={!!previewUrl}
-                    src={previewUrl || THUMBNAIL_FALLBACK}
-                    alt={title}
-                    fill
-                    className="h-full w-full object-cover opacity-0 group-hover:opacity-100"
-                />
+                {/* previewUrl 없을 땐 두 번째 이미지를 아예 렌더하지 않아 모바일/저속 환경 부하 절감 */}
+                {previewUrl ? (
+                    <Image
+                        unoptimized
+                        src={previewUrl}
+                        alt={title}
+                        fill
+                        className="h-full w-full object-cover opacity-0 group-hover:opacity-100"
+                    />
+                ) : null}
             </div>
             {/* Video duration box */}
             <div className="absolute bottom-2 right-2 px-1 py-0.5 rounded bg-black/80 text-white text-xs font-medium">

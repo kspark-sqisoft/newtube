@@ -1,0 +1,2 @@
+CREATE INDEX "subscriptions_viewer_id_updated_at_idx" ON "subscriptions" USING btree ("viewer_id","updated_at");--> statement-breakpoint
+CREATE INDEX "video_reactions_user_id_type_updated_at_idx" ON "video_reactions" USING btree ("user_id","type","updated_at");

@@ -52,31 +52,31 @@ export const commentsRouter = createTRPCRouter({
       z.object({
         parentId: z.string().uuid().nullish(),
         videoId: z.string().uuid(),
-        value: z.string(),
+        // 공백만으로 댓글 생성 방지 + 최대 길이 제한 (DoS)
+        value: z.string().trim().min(1).max(2000),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { parentId, videoId, value } = input;
       const { id: userId } = ctx.user;
 
-      //답글 제한
-      const [existingComment] = await db
-        .select()
-        .from(comments)
-        .where(inArray(comments.id, parentId ? [parentId] : []));
+      // 답글 검증: 부모 존재 + 부모가 reply 아님 + 부모가 같은 videoId
+      if (parentId) {
+        const [parent] = await db
+          .select({ id: comments.id, parentId: comments.parentId, videoId: comments.videoId })
+          .from(comments)
+          .where(eq(comments.id, parentId));
 
-      if (!existingComment && parentId) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Parent comment not found",
-        });
-      }
-
-      if (existingComment?.parentId && parentId) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "You cannot reply to a reply",
-        });
+        if (!parent) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Parent comment not found" });
+        }
+        if (parent.parentId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot reply to a reply" });
+        }
+        if (parent.videoId !== videoId) {
+          // 다른 비디오의 댓글에 답글을 가장한 데이터 변조 방지
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Parent comment does not belong to this video" });
+        }
       }
 
       const [createdComment] = await db
@@ -96,10 +96,11 @@ export const commentsRouter = createTRPCRouter({
       z.object({
         videoId: z.string().uuid(),
         parentId: z.string().uuid().nullish(),
+        // 커서 키는 정렬 키와 반드시 일치해야 페이지네이션 일관성이 보장됨 (createdAt 기준)
         cursor: z
           .object({
             id: z.string().uuid(),
-            updatedAt: z.date(),
+            createdAt: z.date(),
           })
           .nullish(),
         limit: z.number().min(1).max(100),
@@ -157,9 +158,9 @@ export const commentsRouter = createTRPCRouter({
               parentId ? eq(comments.parentId, parentId) : isNull(comments.parentId),
               cursor
                 ? or(
-                    lt(comments.updatedAt, cursor.updatedAt),
+                    lt(comments.createdAt, cursor.createdAt),
                     and(
-                      eq(comments.updatedAt, cursor.updatedAt),
+                      eq(comments.createdAt, cursor.createdAt),
                       lt(comments.id, cursor.id),
                     ),
                   )
@@ -183,7 +184,7 @@ export const commentsRouter = createTRPCRouter({
       const nextCursor = hasMore
         ? {
             id: lastItem.id,
-            updatedAt: lastItem.updatedAt,
+            createdAt: lastItem.createdAt,
           }
         : null;
 

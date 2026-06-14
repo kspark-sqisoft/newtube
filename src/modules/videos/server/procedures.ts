@@ -424,18 +424,11 @@ export const videosRouter = createTRPCRouter({
         .where(and(eq(videos.id, input.id), eq(videos.userId, userId)));
       if (!existingVideo) throw new TRPCError({ code: "NOT_FOUND" });
 
-      if (existingVideo.thumbnailKey) {
-        const utapi = new UTApi();
-        await utapi.deleteFiles(existingVideo.thumbnailKey);
-        await db
-          .update(videos)
-          .set({ thumbnailKey: null, thumbnailUrl: null })
-          .where(and(eq(videos.id, input.id), eq(videos.userId, userId)));
-      }
-
       if (!existingVideo.muxPlaybackId)
         throw new TRPCError({ code: "BAD_REQUEST" });
 
+      // 옛 썸네일은 새 썸네일 업로드 성공 이후에만 정리한다.
+      // 먼저 지웠다가 업로드가 실패하면 사용자의 썸네일이 영구히 사라짐.
       const utapi = new UTApi();
       const tempThumbnailUrl = `https://image.mux.com/${existingVideo.muxPlaybackId}/thumbnail.jpg`;
       const uploadedThumbnail =
@@ -445,6 +438,7 @@ export const videosRouter = createTRPCRouter({
 
       const { key: thumbnailKey, url: thumbnailUrl } = uploadedThumbnail.data;
 
+      const previousKey = existingVideo.thumbnailKey;
       const [updatedVideo] = await db
         .update(videos)
         .set({
@@ -453,6 +447,15 @@ export const videosRouter = createTRPCRouter({
         })
         .where(and(eq(videos.id, input.id), eq(videos.userId, userId)))
         .returning();
+
+      if (previousKey) {
+        // background 정리: 실패해도 사용자 흐름은 영향 없음
+        utapi.deleteFiles(previousKey).catch((error) => {
+          logger.error("Failed to delete previous thumbnail", error, {
+            previousKey,
+          });
+        });
+      }
 
       return updatedVideo;
     }),
@@ -561,7 +564,8 @@ export const videosRouter = createTRPCRouter({
           },
         ],
       },
-      cors_origin: "*", //TODO: In production, set to your url
+      // 업로드는 NEXT_PUBLIC_APP_URL 도메인에서만 허용. dev/prod 모두 env 기반.
+      cors_origin: env.NEXT_PUBLIC_APP_URL,
     });
 
     const [video] = await db

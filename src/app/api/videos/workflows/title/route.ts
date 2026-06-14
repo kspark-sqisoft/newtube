@@ -38,7 +38,8 @@ export const {POST} = serve(
 
         const transcript = await context.run("get-transcript", async() => {
             const trackUrl = `https://stream.mux.com/${video.muxPlaybackId}/text/${video.muxTrackId}.txt`;
-            const response = await fetch(trackUrl);
+            // 외부 fetch 무한 대기 방지 — workflow step 자체 타임아웃과 별개로 명시.
+            const response = await fetch(trackUrl, { signal: AbortSignal.timeout(15_000) });
             if (!response.ok) {
                 throw new Error(`Failed to fetch transcript: ${response.status}`);
             }

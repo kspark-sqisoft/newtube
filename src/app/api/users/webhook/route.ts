@@ -22,11 +22,10 @@ export async function POST(req: Request) {
     });
   }
 
-  const payload = await req.json();
-  const body = JSON.stringify(payload);
+  // svix 도 송신측 raw bytes 기준이라 req.text() 로 검증해야 false negative 없음.
+  const body = await req.text();
 
   let evt: WebhookEvent;
-
   try {
     evt = wh.verify(body, {
       "svix-id": svix_id,

@@ -60,6 +60,8 @@ jobs:
           QSTASH_TOKEN: "test"
           UPSTASH_WORKFLOW_URL: "https://example.com"
           OPENAI_API_KEY: "test"
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_placeholder"
+          # Clerk publishable key 는 "pk_(test|live)_<base64(`<frontendApi>$`)>" 형태여야 검증 통과
+          # decode: "clerk.example.com$" — 빌드 시점 prerender 만 통과시키기 위한 더미 값
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"
           NEXT_TELEMETRY_DISABLED: "1"
         run: bun run build

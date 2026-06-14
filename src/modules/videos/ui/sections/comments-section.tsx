@@ -8,6 +8,7 @@ import { trpc } from "@/trpc/client";
 import { Loader2Icon } from "lucide-react";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { SectionError } from "@/components/section-error";
 
 interface CommentsSectionProps {
     videoId: string;
@@ -16,7 +17,9 @@ interface CommentsSectionProps {
 const CommentsSection = ({ videoId }: CommentsSectionProps) => {
     return (
         <Suspense fallback={<CommentsSectionSkeleton />}>
-            <ErrorBoundary fallback={<div>Error...</div>}>
+            <ErrorBoundary fallbackRender={({ resetErrorBoundary }) => (
+                <SectionError message="댓글을 불러오지 못했어요." onRetry={resetErrorBoundary} />
+            )}>
                 <CommentsSectionSuspense videoId={videoId} />
             </ErrorBoundary>
         </Suspense>

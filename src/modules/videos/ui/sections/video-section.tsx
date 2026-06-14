@@ -8,6 +8,7 @@ import VideoPlayer, { VideoPlayerSkeleton } from "../components/video-player";
 import { VideoBanner } from "../components/video-banner";
 import { VideoTopRow, VideoTopRowSkeleton } from "../components/video-top-row";
 import { useAuth } from "@clerk/nextjs";
+import { SectionError } from "@/components/section-error";
 
 interface VideoSectionProps {
   videoId: string;
@@ -16,7 +17,9 @@ interface VideoSectionProps {
 const VideoSection = ({ videoId }: VideoSectionProps) => {
     return (
         <Suspense fallback={<VideoSectionSkeleton />}>
-            <ErrorBoundary fallback={<div>Error...</div>}>
+            <ErrorBoundary fallbackRender={({ resetErrorBoundary }) => (
+                <SectionError message="영상을 불러오지 못했어요." onRetry={resetErrorBoundary} />
+            )}>
                 <VideoSectionSuspense videoId={videoId} />
             </ErrorBoundary>
         </Suspense>

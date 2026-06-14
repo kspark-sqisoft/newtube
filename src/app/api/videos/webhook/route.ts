@@ -26,31 +26,42 @@ type WebHookEvent =
   | VideoAssetDeletedWebhookEvent;
 
 export const POST = async (request: NextRequest) => {
+  if (!SIGNING_SECRET) {
+    logger.error("MUX_WEBHOOK_SECRET is not set");
+    return new Response("MUX_WEBHOOK_SECRET is not set", { status: 500 });
+  }
+
+  const headersPayload = await headers();
+  const muxSignature = headersPayload.get("mux-signature");
+
+  if (!muxSignature) {
+    logger.warn("Missing mux-signature header");
+    return new Response("Mux signature is not set", { status: 400 });
+  }
+
+  // 서명은 송신측 raw bytes 기준이므로 req.text() 로 받아서 parse 와 verify 모두 처리.
+  // JSON.parse → stringify 는 키 순서·공백 차이로 false negative 가 날 수 있음.
+  const body = await request.text();
+
   try {
-    if (!SIGNING_SECRET) {
-      logger.error("MUX_WEBHOOK_SECRET is not set");
-      return new Response("MUX_WEBHOOK_SECRET is not set", { status: 500 });
-    }
-
-    const headersPayload = await headers();
-    const muxSignature = headersPayload.get("mux-signature");
-
-    if (!muxSignature) {
-      logger.warn("Missing mux-signature header");
-      return new Response("Mux signature is not set", { status: 400 });
-    }
-
-    const payload = await request.json();
-    const body = JSON.stringify(payload);
-
     mux.webhooks.verifySignature(
       body,
-      {
-        "mux-signature": muxSignature,
-      },
-      SIGNING_SECRET
+      { "mux-signature": muxSignature },
+      SIGNING_SECRET,
     );
+  } catch (error) {
+    logger.warn("Mux webhook signature verification failed", { error: String(error) });
+    return new Response("Invalid signature", { status: 401 });
+  }
 
+  let payload: { type: string; data: unknown };
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return new Response("Invalid JSON", { status: 400 });
+  }
+
+  try {
     logger.info("Mux webhook received", { type: payload.type });
 
     switch (payload.type as WebHookEvent["type"]) {

@@ -40,6 +40,19 @@ const t = initTRPC.context<Context>().create({
    * @see https://trpc.io/docs/server/data-transformers
    */
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    // prod 에서는 INTERNAL_SERVER_ERROR 메시지가 클라이언트로 새지 않게 sanitize.
+    // zod 등의 BAD_REQUEST 메시지는 그대로 유지 (UX 위해 필요).
+    const isProd = process.env.NODE_ENV === "production";
+    if (isProd && error.code === "INTERNAL_SERVER_ERROR") {
+      return {
+        ...shape,
+        message: "Internal server error",
+        data: { ...shape.data, stack: undefined },
+      };
+    }
+    return shape;
+  },
 });
 
 // 라우터/프로시저 헬퍼
@@ -67,9 +80,10 @@ export const protectedProcedure = t.procedure.use(
       });
     }
 
-    // mutation만 rate limit (query 스크롤/프리페치와 구분)
+    // mutation 만 rate limit. 키에 procedure path 를 포함시켜
+    // "댓글 스팸 한 번에 비디오 삭제까지 차단" 같은 오작동을 방지.
     if (opts.type === "mutation") {
-      const { success } = await ratelimit.limit(ctx.user.id);
+      const { success } = await ratelimit.limit(`${ctx.user.id}:${opts.path}`);
       if (!success) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
       }

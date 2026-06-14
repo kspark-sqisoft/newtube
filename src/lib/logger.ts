@@ -1,32 +1,55 @@
 /**
  * 환경 분리형 로거.
- * - production 환경에선 info/debug 는 무시하여 노이즈 제거.
- * - error/warn 는 항상 출력.
- *
- * 향후 외부 로깅(Sentry/Axiom 등) 통합 시, 여기 한 곳만 교체하면 됨.
+ * - dev: 사람이 읽기 좋은 콘솔 형식.
+ * - prod: JSON 한 줄 (Vercel/CloudWatch 등 stdout 수집기가 파싱하기 좋게).
+ *   외부 로깅(Sentry/Axiom 등) 통합 시 여기 한 곳만 교체하면 됨.
  */
 const isProd = process.env.NODE_ENV === "production";
 
 type LogContext = Record<string, unknown>;
 
-const format = (level: string, message: string, context?: LogContext) => {
-  if (context && Object.keys(context).length > 0) {
-    return [`[${level}] ${message}`, context];
+type Level = "debug" | "info" | "warn" | "error";
+
+const writeProd = (level: Level, message: string, context?: LogContext) => {
+  const line = JSON.stringify({
+    level,
+    msg: message,
+    time: new Date().toISOString(),
+    ...(context ?? {}),
+  });
+  // debug 는 prod 에서 생략, 나머지는 stdout/stderr 로
+  if (level === "error") {
+    console.error(line);
+  } else if (level === "warn") {
+    console.warn(line);
+  } else {
+    console.log(line);
   }
-  return [`[${level}] ${message}`];
+};
+
+const writeDev = (level: Level, message: string, context?: LogContext) => {
+  const tag = `[${level.toUpperCase()}] ${message}`;
+  const args = context && Object.keys(context).length > 0 ? [tag, context] : [tag];
+  if (level === "error") console.error(...args);
+  else if (level === "warn") console.warn(...args);
+  else if (level === "debug") console.debug(...args);
+  else console.info(...args);
+};
+
+const write = (level: Level, message: string, context?: LogContext) => {
+  if (level === "debug" && isProd) return;
+  (isProd ? writeProd : writeDev)(level, message, context);
 };
 
 export const logger = {
   debug(message: string, context?: LogContext) {
-    if (isProd) return;
-    console.debug(...format("DEBUG", message, context));
+    write("debug", message, context);
   },
   info(message: string, context?: LogContext) {
-    if (isProd) return;
-    console.info(...format("INFO", message, context));
+    write("info", message, context);
   },
   warn(message: string, context?: LogContext) {
-    console.warn(...format("WARN", message, context));
+    write("warn", message, context);
   },
   error(message: string, error?: unknown, context?: LogContext) {
     const payload: LogContext = { ...context };
@@ -36,6 +59,6 @@ export const logger = {
     } else if (error !== undefined) {
       payload.error = error;
     }
-    console.error(...format("ERROR", message, payload));
+    write("error", message, payload);
   },
 };

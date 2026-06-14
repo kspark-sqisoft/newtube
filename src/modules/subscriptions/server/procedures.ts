@@ -79,14 +79,31 @@ export const subscriptionsRouter = createTRPCRouter({
         });
       }
 
+      // 같은 (viewer, creator) 재호출 시 PK 충돌이 5xx 로 새지 않도록 idempotent 처리.
       const [createdSubscription] = await db
         .insert(subscriptions)
         .values({
           viewerId: ctx.user.id,
           creatorId: userId,
         })
+        .onConflictDoNothing({
+          target: [subscriptions.viewerId, subscriptions.creatorId],
+        })
         .returning();
-      return createdSubscription;
+
+      if (createdSubscription) return createdSubscription;
+
+      // 이미 구독한 상태였다면 기존 row 반환
+      const [existing] = await db
+        .select()
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.viewerId, ctx.user.id),
+            eq(subscriptions.creatorId, userId),
+          ),
+        );
+      return existing;
     }),
 
   remove: protectedProcedure

@@ -152,6 +152,8 @@ export const subscriptions = pgTable(
     }),
     // creatorId 단독 조회용 (이 크리에이터를 구독한 사람들 조회)
     index("subscriptions_creator_id_idx").on(t.creatorId),
+    // subscriptions.getMany 의 viewerId 필터 + updatedAt 정렬 (커서 페이지네이션)
+    index("subscriptions_viewer_id_updated_at_idx").on(t.viewerId, t.updatedAt),
   ],
 );
 
@@ -435,6 +437,12 @@ export const videoReactions = pgTable(
     }),
     // videoId + type 조회 (영상별 좋아요/싫어요 집계)
     index("video_reactions_video_id_type_idx").on(t.videoId, t.type),
+    // playlists.getLiked 의 (userId, type) 필터 + updatedAt 정렬 (커서 페이지네이션)
+    index("video_reactions_user_id_type_updated_at_idx").on(
+      t.userId,
+      t.type,
+      t.updatedAt,
+    ),
   ],
 );
 

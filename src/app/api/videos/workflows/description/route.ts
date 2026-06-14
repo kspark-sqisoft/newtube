@@ -37,7 +37,7 @@ export const {POST} = serve(
 
         const transcript = await context.run("get-transcript", async() => {
             const trackUrl = `https://stream.mux.com/${video.muxPlaybackId}/text/${video.muxTrackId}.txt`;
-            const response = await fetch(trackUrl);
+            const response = await fetch(trackUrl, { signal: AbortSignal.timeout(15_000) });
             if (!response.ok) {
                 throw new Error(`Failed to fetch transcript: ${response.status}`);
             }
